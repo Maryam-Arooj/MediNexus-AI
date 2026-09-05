@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Vite cache
+.vite/
+
+# Editor directories
+.vscode/
+.idea/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

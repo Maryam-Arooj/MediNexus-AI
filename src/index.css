@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: rgb(248 250 252);
+    color: rgb(15 23 42);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* Custom Print styles for Screen 3 Digital Parchi */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-parchi-card {
+    box-shadow: none !important;
+    border: 2px solid #0f172a !important;
+    page-break-inside: avoid;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
