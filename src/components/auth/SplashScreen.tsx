@@ -79,7 +79,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onDone }) => {
         {/* Brand name */}
         <div>
           <h1 className="text-5xl font-black text-white tracking-tight leading-none">
-            Smart<span style={{ color: '#a7f3d0' }}>Care</span>
+            Medi<span style={{ color: '#a7f3d0' }}>Nexus AI</span>
           </h1>
           <p className="mt-2 text-lg font-medium text-teal-100 tracking-widest uppercase">
             AI Medical Assistant

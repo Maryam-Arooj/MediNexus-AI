@@ -73,8 +73,8 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
             </svg>
           </div>
           <div>
-            <span className="text-xl font-black text-white">Smart</span>
-            <span className="text-xl font-black" style={{ color: '#a7f3d0' }}>Care</span>
+            <span className="text-xl font-black text-white">Medi</span>
+            <span className="text-xl font-black" style={{ color: '#a7f3d0' }}>Nexus AI</span>
             <p className="text-teal-200 text-xs font-medium">AI Medical Assistant</p>
           </div>
         </div>
@@ -84,7 +84,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
       <div className="flex-1 px-4 -mt-2">
         <div className="w-full max-w-md mx-auto bg-white rounded-3xl shadow-xl p-7 mb-6">
           <h2 className="text-2xl font-bold text-slate-800 mb-1">Create Your Account</h2>
-          <p className="text-slate-500 text-sm mb-5">Join SmartCare for a better healthcare experience</p>
+          <p className="text-slate-500 text-sm mb-5">Join MediNexus AI for a better healthcare experience</p>
 
           {/* Role tabs */}
           <div className="flex gap-2 mb-5 p-1 bg-slate-100 rounded-xl">

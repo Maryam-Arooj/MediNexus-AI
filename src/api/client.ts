@@ -50,7 +50,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     });
   } catch {
     throw new Error(
-      'Cannot reach the SmartCare backend. Make sure the backend server is running on port 3001.'
+      'Cannot reach the MediNexus AI backend. Make sure the backend server is running on port 3001.'
     );
   }
 

@@ -75,7 +75,7 @@ export const Screen3DigitalParchi: React.FC<Screen3Props> = ({
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
                 <span className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
-                  SMARTCARE DIGITAL OPD SYSTEM
+                  MEDINEXUS AI DIGITAL OPD SYSTEM
                 </span>
               </div>
               <h2 className="text-xl font-extrabold text-white tracking-tight mt-0.5">
@@ -265,7 +265,7 @@ export const Screen3DigitalParchi: React.FC<Screen3Props> = ({
             </div>
 
             <div className="text-right text-[11px] text-slate-400">
-              <div>SmartCare v1.0 MVP • Paperless OPD</div>
+              <div>MediNexus AI v1.0 MVP • Paperless OPD</div>
               <div>Final medical validation by registered medical officer.</div>
             </div>
           </div>

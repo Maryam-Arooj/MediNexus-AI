@@ -34,8 +34,8 @@ export const RoleSelectScreen: React.FC<RoleSelectScreenProps> = ({
             </svg>
           </div>
           <div>
-            <span className="text-xl font-black text-white">Smart</span>
-            <span className="text-xl font-black" style={{ color: '#a7f3d0' }}>Care</span>
+            <span className="text-xl font-black text-white">Medi</span>
+            <span className="text-xl font-black" style={{ color: '#a7f3d0' }}>Nexus AI</span>
             <p className="text-teal-200 text-xs font-medium">AI Medical Assistant</p>
           </div>
         </div>

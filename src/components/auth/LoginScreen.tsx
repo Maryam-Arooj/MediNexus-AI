@@ -54,8 +54,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
           </svg>
         </div>
         <div className="text-center">
-          <span className="text-3xl font-black text-white">Smart</span>
-          <span className="text-3xl font-black" style={{ color: '#a7f3d0' }}>Care</span>
+          <span className="text-3xl font-black text-white">Medi</span>
+          <span className="text-3xl font-black" style={{ color: '#a7f3d0' }}>Nexus AI</span>
           <p className="text-teal-200 text-xs font-medium tracking-widest uppercase mt-0.5">AI Medical Assistant</p>
         </div>
       </div>
@@ -158,7 +158,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
       {/* Footer */}
       <p className="text-center text-xs text-slate-400 py-6">
-        🔒 Your data is safe and secure — SmartCare uses bank-level encryption
+        🔒 Your data is safe and secure — MediNexus AI uses bank-level encryption
       </p>
     </div>
   );

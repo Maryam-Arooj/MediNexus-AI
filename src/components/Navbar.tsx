@@ -34,7 +34,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             HACKATHON MVP
           </span>
           <span className="text-slate-300 font-medium hidden sm:inline">
-            SmartCare OPD Queue-Buster & Triage Pre-Check System
+            MediNexus AI OPD Queue-Buster & Triage Pre-Check System
           </span>
           <span className="text-slate-400 text-[11px]">
             • Supported: General Medicine & Dermatology
@@ -90,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="font-bold text-lg text-slate-900 tracking-tight">SmartCare</span>
+                <span className="font-bold text-lg text-slate-900 tracking-tight">MediNexus AI</span>
                 <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-700 border border-teal-200">
                   AI Medical Assistant
                 </span>

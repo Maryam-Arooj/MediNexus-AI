@@ -1,8 +1,8 @@
-﻿# SmartCare — AI Medical Assistant & Digital Registration
+# MediNexus AI — AI Medical Assistant & Digital Registration System
 
 > *"From Digital Registration to Smarter Medical Care."*
 
-**SmartCare** is a hackathon MVP that digitises the OPD patient registration and pre-triage workflow at government hospitals. Patients self-register their symptoms before arriving at the doctor's desk, receive an AI-generated triage assessment and a digital registration slip (*parchi*), and are routed directly to the correct OPD room — bypassing the physical queue counter.
+**MediNexus AI** is a hackathon MVP that digitises the OPD patient registration and pre-triage workflow at government hospitals. Patients self-register their symptoms before arriving at the doctor's desk, receive an AI-generated triage assessment and a digital registration slip (*parchi*), and are routed directly to the correct OPD room — bypassing the physical queue counter.
 
 ---
 
@@ -196,4 +196,4 @@ Full setup guide: [SETUP.md](./SETUP.md)
 
 ---
 
-*SmartCare MVP — Built for a Hackathon. Not a medical device. All triage output requires validation by a licensed physician.*
+*MediNexus AI MVP — Built for a Hackathon. Not a medical device. All triage output requires validation by a licensed physician.*

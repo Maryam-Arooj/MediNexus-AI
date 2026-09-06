@@ -11,7 +11,7 @@ router.get('/', async (_req: Request, res: Response) => {
     res.json({
       success: true,
       status: 'ok',
-      api: 'SmartCare Backend',
+      api: 'MediNexus AI Backend',
       database: 'PostgreSQL — connected',
       timestamp: new Date().toISOString(),
     });
@@ -19,7 +19,7 @@ router.get('/', async (_req: Request, res: Response) => {
     res.status(503).json({
       success: false,
       status: 'error',
-      api: 'SmartCare Backend',
+      api: 'MediNexus AI Backend',
       database: 'PostgreSQL — disconnected',
       error: String(err),
       timestamp: new Date().toISOString(),

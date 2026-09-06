@@ -71,7 +71,7 @@ export const Screen2AIAnalysis: React.FC<Screen2Props> = ({
             AI-generated assessment — requires doctor review
           </div>
           <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-            SmartCare assists initial medical triage and queue routing. It does NOT replace a licensed physician. The final medical diagnosis, prescription, and clinical decisions remain strictly with the attending doctor.
+            MediNexus AI assists initial medical triage and queue routing. It does NOT replace a licensed physician. The final medical diagnosis, prescription, and clinical decisions remain strictly with the attending doctor.
           </p>
         </div>
       </div>

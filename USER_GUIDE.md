@@ -1,6 +1,6 @@
-# SmartCare – Complete Working Guide
+# MediNexus AI – Complete Working Guide
 
-Welcome to the **SmartCare User Guide**. This document is a practical, step-by-step user manual and demonstration guide for the **SmartCare — AI Medical Assistant & Digital Registration System**.
+Welcome to the **MediNexus AI User Guide**. This document is a practical, step-by-step user manual and demonstration guide for the **MediNexus AI — AI Medical Assistant & Digital Registration System**.
 
 It covers exactly how to open, operate, and demonstrate the application from both the **Patient** and **Doctor** perspectives based strictly on the features currently implemented in the software.
 
@@ -9,7 +9,7 @@ It covers exactly how to open, operate, and demonstrate the application from bot
 ## 1. Starting the Application
 
 ### How to Open the Application
-1. Ensure both the SmartCare backend server (port `3001`) and frontend server (port `5173`) are running.
+1. Ensure both the MediNexus AI backend server (port `3001`) and frontend server (port `5173`) are running.
 2. Open any modern web browser (Google Chrome, Microsoft Edge, Mozilla Firefox).
 3. In the URL address bar, navigate to:
    ```
@@ -17,10 +17,10 @@ It covers exactly how to open, operate, and demonstrate the application from bot
    ```
 
 ### What Appears First: The Splash Screen
-When the application first loads in your browser, a full-screen **SmartCare Splash Screen** appears:
+When the application first loads in your browser, a full-screen **MediNexus AI Splash Screen** appears:
 * **Background:** Deep medical teal gradient (`#0d9488` to `#134e4a`) with soft translucent hospital wave patterns.
-* **SmartCare Logo:** The official SmartCare shield with heart and medical cross emblem.
-* **Branding:** "SmartCare" title with "AI Medical Assistant" in bold lettering.
+* **MediNexus AI Logo:** The official MediNexus AI shield with heart and medical cross emblem.
+* **Branding:** "MediNexus AI" title with "AI Medical Assistant" in bold lettering.
 * **Tagline:** *"Smarter Diagnosis • Faster Care • Healthier Tomorrow"*.
 * **Animations:** A glowing medical pulse heartbeat waveform and animated loading indicators.
 
@@ -30,18 +30,18 @@ When the application first loads in your browser, a full-screen **SmartCare Spla
 
 ### Where the User Lands
 * **First-time or logged-out users:** Land directly on the **Login Screen** ("Welcome Back — Sign in to access your healthcare dashboard").
-* **Already authenticated users (active session):** If you already logged in on that browser, SmartCare remembers your session token and takes you directly to the **Select Your Identity / Role** screen.
+* **Already authenticated users (active session):** If you already logged in on that browser, MediNexus AI remembers your session token and takes you directly to the **Select Your Identity / Role** screen.
 
 ---
 
 ## 2. Login
 
-The Login screen allows both patients and medical staff to access their SmartCare portal securely.
+The Login screen allows both patients and medical staff to access their MediNexus AI portal securely.
 
 ![Login Screen](file:///C:/Users/vc/.gemini/antigravity-ide/brain/a4f2faff-d161-4dc0-8daf-1635b3b4ac2a/login_screen_view_1788672245028.png)
 
 ### Screen Elements
-* **Brand Header:** Teal header card with the SmartCare logo and title.
+* **Brand Header:** Teal header card with the MediNexus AI logo and title.
 * **Welcome Card:** Contains the sign-in form with clear labels and input icons.
 * **CNIC / National ID or Email Input:** A flexible field that accepts either a National CNIC number (e.g., `35201-1234567-1`) or an Email address (e.g., `doctor.test@smartcare.com`).
 * **Password Input with Visibility Toggle:** An eye icon button on the right allows revealing or hiding your password while typing.
@@ -107,10 +107,10 @@ If a patient does not yet have an account, they must create one through the Regi
 
 ### Important Notice
 > **A patient cannot log in using random or unregistered credentials.**  
-> SmartCare validates every login against real user records in PostgreSQL. Before logging in as a patient, you must first register an account via Section 3 above.
+> MediNexus AI validates every login against real user records in PostgreSQL. Before logging in as a patient, you must first register an account via Section 3 above.
 
 ### How an Existing Patient Logs In
-1. Navigate to the SmartCare URL (`http://localhost:5173/`).
+1. Navigate to the MediNexus AI URL (`http://localhost:5173/`).
 2. On the **Login Screen**, type the **CNIC** or **Email** used during registration.
 3. Type the **Password** you chose during registration.
 4. Click **Sign In**.
@@ -175,7 +175,7 @@ Select how long the symptoms have been present:
 #### 6. Action: Start AI Check Button
 * Click **Start AI Check** (bottom right with sparkles).
 * The button switches to a spinner showing *"Registering…"*.
-* The patient record is stored in PostgreSQL and SmartCare automatically transitions to **Screen 2: AI Medical Analysis**.
+* The patient record is stored in PostgreSQL and MediNexus AI automatically transitions to **Screen 2: AI Medical Analysis**.
 
 ---
 
@@ -186,7 +186,7 @@ Screen 2 presents an instant, transparent clinical pre-triage summary of the pat
 #### 1. Mandatory Medical Disclaimer Banner
 * A prominent amber alert at the top states:  
   **"AI-GENERATED ASSESSMENT — REQUIRES DOCTOR REVIEW"**  
-  Explains that SmartCare assists initial triage and queue routing but does NOT replace a licensed physician.
+  Explains that MediNexus AI assists initial triage and queue routing but does NOT replace a licensed physician.
 
 #### 2. Patient Summary Header Card
 * Displays Patient Name, Age, Gender, presenting symptoms, duration, and the unique assigned **Token Number** (e.g., `DERM-03` or `GM-01`).
@@ -226,7 +226,7 @@ Screen 3 is the hospital-ready electronic appointment slip ("Parchi") that repla
 * **"Doctor Dashboard" Button:** Quick navigation link for doctors or staff.
 
 #### 2. The Digital Parchi Slip Card
-* **Hospital Header:** "SmartCare Digital OPD System — Outpatient Digital Registration Slip (Parchi)".
+* **Hospital Header:** "MediNexus AI Digital OPD System — Outpatient Digital Registration Slip (Parchi)".
 * **Token Serial Box:** Large high-contrast token display (e.g., `DERM-03`) with department tag.
 * **Required Operational Badges:**
   * `✓ Digital Registration Completed` (Emerald badge)
@@ -253,7 +253,7 @@ Doctor access provides full clinical control to inspect queues, review patient t
 3. *(Security note: The actual password is provided in team submission credentials and is never exposed in public documentation).*
 
 ### Step-by-Step Doctor Sign-In
-1. Open the SmartCare Login screen.
+1. Open the MediNexus AI Login screen.
 2. In the **CNIC / National ID or Email** field, enter the authorized doctor email:
    ```
    doctor.test@smartcare.com
@@ -371,7 +371,7 @@ graph TD
 
 ### Explanation of Steps
 1. **Open App:** Patient visits `http://localhost:5173/`.
-2. **Splash Screen:** Displays SmartCare logo and branding for 3 seconds.
+2. **Splash Screen:** Displays MediNexus AI logo and branding for 3 seconds.
 3. **Login / Register:** If new, clicks **Register**, selects **Patient**, completes the form, and accepts terms.
 4. **Select Role:** On the Identity selection screen, clicks **Patient**.
 5. **Screen 1 (Registration):** Patient inputs age, gender, selects symptoms from General Medicine or Dermatology, chooses duration, and clicks **Start AI Check**.
@@ -468,7 +468,7 @@ graph TD
 
 ## 13. Step-by-Step Demonstration Flow (For Judges / Evaluators)
 
-When demonstrating SmartCare to a teacher, judge, or hackathon panel, use this recommended 10-step sequence:
+When demonstrating MediNexus AI to a teacher, judge, or hackathon panel, use this recommended 10-step sequence:
 
 1. **Show Splash Screen:** Open `http://localhost:5173/` and let the 3-second branded splash screen play.
 2. **Show Login Screen:** Point out the clean UI, CNIC/Email flexibility, and password show/hide toggle.

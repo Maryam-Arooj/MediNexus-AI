@@ -13,7 +13,7 @@ async function start() {
     console.log('✅ PostgreSQL connected');
 
     app.listen(PORT, () => {
-      console.log(`🚀 SmartCare backend running at http://localhost:${PORT}`);
+      console.log(`🚀 MediNexus AI backend running at http://localhost:${PORT}`);
       console.log(`   Health: http://localhost:${PORT}/api/health`);
       console.log(`   Patients: http://localhost:${PORT}/api/patients`);
     });

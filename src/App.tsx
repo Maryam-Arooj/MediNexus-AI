@@ -159,7 +159,7 @@ const AppInner: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(160deg, #0d9488, #134e4a)' }}>
         <div className="flex flex-col items-center gap-4 text-white">
           <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm font-medium text-teal-100">Loading SmartCare…</p>
+          <p className="text-sm font-medium text-teal-100">Loading MediNexus AI…</p>
         </div>
       </div>
     );
@@ -242,7 +242,7 @@ const AppInner: React.FC = () => {
       <footer className="no-print bg-white border-t border-slate-200 py-6 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-800">SmartCare</span>
+            <span className="font-bold text-slate-800">MediNexus AI</span>
             <span>— AI Medical Assistant MVP</span>
             <span className="text-slate-300">|</span>
             <span className="text-slate-400">Not an AI Doctor. Medical Pre-Check &amp; Digital Registration Only.</span>
