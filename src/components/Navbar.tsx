@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, ClipboardList, Stethoscope, FileText, CheckCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { Activity, ClipboardList, Stethoscope, FileText, CheckCircle, Sparkles, RefreshCw, LogOut } from 'lucide-react';
 
 interface NavbarProps {
   currentScreen: number;
@@ -7,6 +7,7 @@ interface NavbarProps {
   onLoadPreset: (preset: 'fever' | 'dermatology') => void;
   onReset: () => void;
   hasActivePatient: boolean;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +16,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLoadPreset,
   onReset,
   hasActivePatient,
+  onLogout,
 }) => {
   const screens = [
     { id: 1, label: '1. Patient Registration', shortLabel: 'Registration', icon: ClipboardList },
@@ -64,6 +66,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <RefreshCw className="w-3 h-3" />
             Reset
           </button>
+          {onLogout && (
+            <button
+              id="navbar-logout"
+              onClick={onLogout}
+              title="Logout"
+              className="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-900/40 text-slate-300 hover:text-rose-200 border border-slate-700 transition flex items-center gap-1"
+            >
+              <LogOut className="w-3 h-3" />
+              Logout
+            </button>
+          )}
         </div>
       </div>
 

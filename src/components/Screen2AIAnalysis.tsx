@@ -8,10 +8,8 @@ import {
   Stethoscope,
   ArrowRight,
   User,
-  Clock,
   Sparkles,
   ArrowLeft,
-  Info
 } from 'lucide-react';
 
 interface Screen2Props {

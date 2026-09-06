@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
 import { PatientRegistrationInput } from '../types/medical';
 import { SYMPTOMS_BY_DEPARTMENT, DURATION_OPTIONS } from '../data/mockData';
-import { Sparkles, AlertCircle, ArrowRight, ShieldCheck, Clock, HeartPulse } from 'lucide-react';
+import { Sparkles, AlertCircle, ArrowRight, ShieldCheck, Clock, HeartPulse, Loader2 } from 'lucide-react';
 
 interface Screen1Props {
   initialData: PatientRegistrationInput;
   onSubmit: (data: PatientRegistrationInput) => void;
   onLoadPreset: (preset: 'fever' | 'dermatology') => void;
+  isSubmitting?: boolean;
+  submitError?: string | null;
 }
 
 export const Screen1Registration: React.FC<Screen1Props> = ({
   initialData,
   onSubmit,
   onLoadPreset,
+  isSubmitting = false,
+  submitError = null,
 }) => {
   const [formData, setFormData] = useState<PatientRegistrationInput>(initialData);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +121,17 @@ export const Screen1Registration: React.FC<Screen1Props> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {/* Backend submission error (e.g. server not running) */}
+          {submitError && (
+            <div className="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold">Backend Error</div>
+                <div className="text-xs mt-0.5">{submitError}</div>
+              </div>
+            </div>
+          )}
+          {/* Local form validation error */}
           {error && (
             <div className="p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-sm flex items-start gap-2">
               <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -321,11 +336,21 @@ export const Screen1Registration: React.FC<Screen1Props> = ({
             <button
               type="submit"
               id="btn-start-ai-check"
-              className="w-full sm:w-auto px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 group"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold text-sm shadow-md shadow-emerald-600/20 transition flex items-center justify-center gap-2 group"
             >
-              <Sparkles className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform" />
-              <span>Start AI Check</span>
-              <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Registering...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-emerald-200 group-hover:scale-110 transition-transform" />
+                  <span>Start AI Check</span>
+                  <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-0.5 transition-transform" />
+                </>
+              )}
             </button>
           </div>
         </form>

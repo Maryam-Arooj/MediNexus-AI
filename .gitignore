@@ -1,14 +1,22 @@
 # Dependencies
 node_modules/
+backend/node_modules/
 
 # Build output
 dist/
 dist-ssr/
+backend/dist/
 
-# Environment / secrets
+# Environment / secrets — NEVER commit .env files
 .env
 .env.*
 !.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Prisma generated
+backend/node_modules/.prisma/
 
 # Vite cache
 .vite/

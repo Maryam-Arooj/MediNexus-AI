@@ -11,8 +11,6 @@ import {
   Stethoscope,
   Calendar,
   Clock,
-  User,
-  ExternalLink,
 } from 'lucide-react';
 
 interface Screen3Props {

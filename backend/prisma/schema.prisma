@@ -1,0 +1,78 @@
+// This is your Prisma schema file
+// https://www.prisma.io/docs/concepts/components/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id          String   @id @default(cuid())
+  patientId   String   @unique // e.g. "SC-2026-1042"
+  name        String   @default("Anonymous Patient")
+  age         Int
+  gender      String
+  symptoms    Json     // String[]
+  duration    String
+  tokenNumber String   @unique // e.g. "GM-042" or "DERM-018"
+  department  String
+  assignedRoom String
+  createdAt   DateTime @default(now())
+
+  userId    String?  // optional FK to User — set when patient registered via auth
+  user      User?    @relation(fields: [userId], references: [id])
+
+  triage TriageResult?
+  review DoctorReview?
+
+  @@map("patients")
+}
+
+model TriageResult {
+  id                    String   @id @default(cuid())
+  patientId             String   @unique
+  patient               Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  riskLevel             String   // "Low" | "Medium" | "High"
+  redFlags              Json     // String[]
+  possibleConditions    Json     // String[]
+  recommendedAction     String
+  doctorHandoverSummary String
+  confidenceScore       Int
+  createdAt             DateTime @default(now())
+
+  @@map("triage_results")
+}
+
+model DoctorReview {
+  id                       String    @id @default(cuid())
+  patientId                String    @unique
+  patient                  Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  status                   String    @default("Pending Review") // "Pending Review" | "Under Review" | "Approved"
+  clinicalNotes            String?
+  recommendedActionOverride String?
+  approvedBy               String?
+  approvedAt               DateTime?
+  updatedAt                DateTime  @updatedAt
+
+  @@map("doctor_reviews")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  fullName     String
+  cnic         String    @unique
+  email        String?   @unique
+  phone        String?
+  passwordHash String
+  role         String    @default("patient") // "patient" | "doctor"
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  patients Patient[]
+
+  @@map("users")
+}

@@ -25,55 +25,43 @@ Replace the paper-based registration counter with a self-service digital pre-che
 
 ## Current MVP — What Is Built
 
-The MVP is a fully client-side, single-page React application with four sequential screens connected by a shared application state.
+The MVP is a **full-stack application**: React frontend → Express/TypeScript backend → Prisma → local PostgreSQL.
 
 ### Screen 1 — Patient Pre-Registration
 
 - Input fields: full name (optional / anonymous allowed), age (required, 1–120), gender (required: Male / Female / Other).
-- Symptom selector grouped by department — toggleable cards for **General Medicine** (Fever, Flu, Headache, Cough, Sore throat, Body pain) and **Dermatology** (Skin rash, Itching, Redness, Minor skin infection).
+- Symptom selector grouped by department — toggleable cards for **General Medicine** and **Dermatology**.
 - Duration selector: Today (sudden onset) / 1–2 days / 3–5 days / 1–2 weeks / More than 2 weeks.
 - Form validation with inline error messages.
-- Two quick-fill demo presets in the navbar for hackathon judges: **Load Fever/Cough Demo** and **Load Skin Rash Demo**.
-- On submission, the triage engine is called synchronously and the app advances to Screen 2.
+- Two quick-fill demo presets: **Load Fever/Cough Demo** and **Load Skin Rash Demo** (creates real PostgreSQL records).
+- On submission, `POST /api/patients` runs triage on the backend and the app advances to Screen 2.
 
 ### Screen 2 — AI Medical Analysis
 
 - Displays the triage result generated for the submitted patient:
   - **Risk level** badge: Low / Medium / High, with a 3-segment visual scale.
   - **Red flags & clinical warnings** panel.
-  - **Suggested department** (General Medicine or Dermatology) with the assigned OPD room.
+  - **Suggested department** with the assigned OPD room.
   - **Possible conditions** — a ranked differential list (pre-triage only, not a diagnosis).
   - **Recommended action** — plain-language instruction to the patient.
-  - **Doctor Handover Summary** — a pre-formatted, SBAR-style clinical summary ready for the doctor's desk.
-- A mandatory disclaimer banner states that the output requires doctor review and does not replace a licensed physician.
+  - **Doctor Handover Summary** — a pre-formatted, SBAR-style clinical summary.
+- Mandatory disclaimer banner.
 - Navigation: back to edit symptoms, or proceed to generate the digital parchi.
 
 ### Screen 3 — Digital Parchi (OPD Slip)
 
-- A printable registration slip containing:
-  - Hospital header, token number, and department.
-  - Patient ID (e.g. `SC-2026-xxxx`), name, age/gender, assigned OPD room.
-  - Reported symptoms and duration.
-  - Risk level badge and triage tier.
-  - Red flags assessment.
-  - AI Pre-Triage Handover Summary (same text as Screen 2).
-  - Recommended action / patient instructions.
-  - A placeholder QR code icon labelled "Digital Token Verification QR" (visual mock only — not a real scannable code).
+- A printable registration slip containing token number, patient ID, demographics, symptoms, triage summary, and recommended action.
 - **Print / Save Slip** button invokes `window.print()`.
 - Status badges: "Digital Registration Completed" and "Doctor Review Required".
 
 ### Screen 4 — Physician OPD Triage Dashboard
 
-- A data table listing all pre-registered patients in the current session (including four pre-loaded mock patients).
+- Loads all patients from PostgreSQL via `GET /api/patients`.
 - **Metrics summary row**: Total Queue count, High Risk count, Awaiting Review count.
-- **Filters**: department tab filter (All / General Medicine / Dermatology) and a live search field (by name, patient ID, token number, or symptom).
-- Each row shows: token number, patient ID, name, age/gender, department, presenting symptoms, risk level badge, and status (Pending Review / Under Review / Approved).
-- **Open Report** opens a modal with the full AI triage report for that patient.
-- Inside the modal, the doctor can:
-  - View risk level, red flags, the AI handover summary, and recommended action.
-  - Click **Edit** to modify the recommended action text and add free-text clinical notes.
-  - Click **Approve Triage** to mark the patient status as Approved (recorded with a timestamp and "Dr. Resident Medical Officer" as the approver).
-- **Register New Patient** button resets the form and returns to Screen 1.
+- **Filters**: department tab filter and live search field.
+- Each row shows token, patient ID, demographics, department, symptoms, risk level, and status.
+- **Open Report** modal: view triage, edit action/notes (`PUT /api/patients/:id/review`), approve (`POST /api/patients/:id/approve`).
+- Data persists across browser refresh.
 
 ---
 
@@ -85,7 +73,7 @@ Patient / Receptionist
         v
 [Screen 1] Enter name, age, gender, symptoms, duration
         |
-        v  (Submit -> triage engine runs instantly)
+        v  (Submit -> POST /api/patients -> triage + save to PostgreSQL)
 [Screen 2] Review AI risk level, red flags, suggested department,
            possible conditions, recommended action, doctor summary
         |
@@ -94,46 +82,21 @@ Patient / Receptionist
            Patient prints or saves slip; goes directly to OPD room
         |
         v  (Doctor Dashboard link)
-[Screen 4] Doctor sees patient queue, opens report modal,
-           edits notes if needed, and approves triage
+[Screen 4] Doctor sees patient queue from PostgreSQL, opens report modal,
+           edits notes if needed, and approves triage (persisted)
 ```
 
 ---
 
 ## AI's Role
 
-There is **no external AI API** in this MVP. The "AI" is a deterministic, rule-based triage engine implemented in `src/data/mockData.ts` (`evaluateMedicalTriage` function). It:
+There is **no external AI API**. The "AI" is a deterministic, rule-based triage engine in `backend/src/triage/evaluateMedicalTriage.ts`. It:
 
 - Counts symptom matches per department to assign a department.
-- Applies rule-based logic (symptom combinations, age, duration) to classify risk as Low / Medium / High and generate red-flag text.
-- Selects possible conditions from a fixed differential list based on symptom patterns.
+- Applies rule-based logic (symptom combinations, age, duration) to classify risk as Low / Medium / High.
+- Selects possible conditions from a fixed differential list.
 - Constructs the recommended action and doctor handover summary as template strings.
-- Returns a fixed `confidenceScore` of 94% (hardcoded for demonstration).
-
-The engine produces consistent, deterministic output for any given input combination. It is labelled "AI Triage" in the UI to represent what a real ML/LLM-based triage model would do in production.
-
----
-
-## Doctor's Role / Review
-
-The doctor is **always the final authority**. The application makes this explicit at every step:
-
-- Screen 2 shows a prominent disclaimer: *"SmartCare assists initial medical triage and queue routing. It does NOT replace a licensed physician."*
-- Screen 3 bears a "Doctor Review Required" badge.
-- Screen 4 requires the doctor to explicitly click **Approve Triage** for each patient.
-- The doctor can override the recommended action text and add free-text clinical notes before approving.
-- No prescription or diagnosis is generated or displayed; the system only produces pre-triage summaries.
-
----
-
-## Included Departments
-
-| Department | Token Prefix | OPD Room | Symptoms Covered |
-|---|---|---|---|
-| General Medicine | `GM-` | Room 104 | Fever, Flu, Headache, Cough, Sore throat, Body pain |
-| Dermatology | `DERM-` | Room 208 | Skin rash, Itching, Redness, Minor skin infection |
-
-Only these two departments are active in the current MVP.
+- Returns a fixed `confidenceScore` of 94%.
 
 ---
 
@@ -143,78 +106,94 @@ Only these two departments are active in the current MVP.
 |---|---|
 | UI Framework | React 18 (TypeScript) |
 | Build Tool | Vite 6 with @vitejs/plugin-react |
-| Styling | Tailwind CSS v3 (utility classes; no custom CSS framework) |
-| Icons | lucide-react |
-| Fonts | Inter (Google Fonts, loaded via CDN in index.html) |
-| State Management | React useState in App.tsx (no external store) |
-| Data / Backend | None -- all data is in-memory (client-side only) |
-| AI / ML | None -- deterministic rule engine (evaluateMedicalTriage) |
-| Routing | None -- single-page, screen switching via currentScreen integer state |
-| Persistence | None -- data resets on page refresh |
+| Styling | Tailwind CSS v3 |
+| Backend | Node.js, Express 4, TypeScript |
+| ORM | Prisma 5 |
+| Database | PostgreSQL (local) |
+| AI / ML | None — deterministic rule engine |
+| State Management | React useState in App.tsx |
+| Persistence | PostgreSQL via REST API |
 
 **File structure:**
 
 ```
-src/
-  App.tsx                      # Root component, global state, screen router
-  main.tsx                     # React DOM entry point
-  index.css                    # Minimal global styles
-  types/
-    medical.ts                 # TypeScript interfaces: PatientRecord, AIAnalysisResult, etc.
-  data/
-    mockData.ts                # Triage engine, symptom lists, duration options, mock patients
-  components/
-    Navbar.tsx                 # Sticky top nav with stepper tabs and demo presets
-    Screen1Registration.tsx    # Patient pre-registration form
-    Screen2AIAnalysis.tsx      # AI triage result display
-    Screen3DigitalParchi.tsx   # Printable digital OPD slip
-    Screen4DoctorDashboard.tsx # Doctor queue table, filters, report modal, approve action
+src/                          # React frontend
+  App.tsx                     # Root component, API orchestration
+  api/client.ts               # Backend API client
+  types/medical.ts            # TypeScript interfaces
+  data/mockData.ts            # Symptom lists, duration options (UI only)
+  components/                 # Four screens + Navbar
+
+backend/
+  prisma/schema.prisma        # Patient, TriageResult, DoctorReview
+  prisma/seed.ts              # 4 idempotent demo patients
+  src/
+    server.ts                 # Entry point
+    app.ts                    # Express app
+    routes/                   # /api/health, /api/patients
+    services/                 # Business logic
+    triage/                   # evaluateMedicalTriage()
 ```
 
----
-
-## What Is Currently Implemented
-
-- Patient pre-registration form (name, age, gender, symptoms, duration)
-- Deterministic triage engine producing risk level, red flags, department, conditions, summary
-- Token number and patient ID generation (sequential, in-memory)
-- AI Medical Analysis screen with full triage result display
-- Digital Parchi (OPD slip) with browser print support
-- Doctor Dashboard with patient queue table, department/search filters, and metrics
-- Doctor report modal with inline editing of action plan and clinical notes
-- Doctor approval action (marks patient as Approved with timestamp)
-- Four pre-loaded mock patients for dashboard demonstration
-- Two quick-fill demo presets (Fever/Cough, Skin Rash) in the navbar
-- Mandatory AI disclaimer and "Doctor Review Required" messaging throughout
-
----
-
-## Intentionally Out of Scope (Current MVP)
-
-- Real AI / ML model or external LLM API integration
-- Backend server, database, or any data persistence
-- User authentication or role-based access control
-- Real QR code generation or scanning
-- Vital signs input (temperature, SpO2, blood pressure, etc.)
-- Prescription generation or medication management
-- Patient history or medical record lookup
-- SMS / WhatsApp / push notifications for token status
-- Departments beyond General Medicine and Dermatology
-- Multi-language / Urdu / Hindi support
-- Mobile app (PWA or native)
-- Hospital system integration (HIS / EMR / HL7 / FHIR)
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full details.
 
 ---
 
 ## Running Locally
 
+**Prerequisites:** Node.js 18+, PostgreSQL running locally.
+
 ```bash
+# 1. Install dependencies
 npm install
+cd backend && npm install && cd ..
+
+# 2. Configure backend/.env (copy from backend/.env.example)
+#    DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/smartcare
+#    PORT=3001
+
+# 3. Migrate and seed
+cd backend
+npx prisma migrate dev
+npm run db:seed
+cd ..
+
+# 4. Start backend (terminal 1)
+cd backend && npm run dev
+
+# 5. Start frontend (terminal 2)
 npm run dev
 ```
 
-The app starts at `http://localhost:3000`.
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3001`
+- Health check: `http://localhost:3001/api/health`
+
+Full setup guide: [SETUP.md](./SETUP.md)
 
 ---
 
-*SmartCare MVP -- Built for a Hackathon. Not a medical device. All triage output requires validation by a licensed physician.*
+## Documentation
+
+| Document | Description |
+|---|---|
+| [SETUP.md](./SETUP.md) | Installation and configuration |
+| [REQUIREMENTS.md](./REQUIREMENTS.md) | Functional requirements |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System design and data flow |
+| [API.md](./API.md) | REST API reference |
+| [DATABASE.md](./DATABASE.md) | Schema, migrations, seed |
+
+---
+
+## Intentionally Out of Scope
+
+- Real AI / ML model or external LLM API integration
+- User authentication or role-based access control
+- Real QR code generation or scanning
+- Vital signs input, prescriptions, SMS notifications
+- Cloud databases (MongoDB, SQLite, Supabase, Firebase)
+- Departments beyond General Medicine and Dermatology
+
+---
+
+*SmartCare MVP — Built for a Hackathon. Not a medical device. All triage output requires validation by a licensed physician.*
