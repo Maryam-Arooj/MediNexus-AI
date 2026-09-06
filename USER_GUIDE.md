@@ -1,4 +1,6 @@
-# MediNexus AI – Complete Working Guide
+# MediNexus AI — AI Medical Assistant & Digital Registration System
+
+> **Complete Working & Demonstration Guide**
 
 Welcome to the **MediNexus AI User Guide**. This document is a practical, step-by-step user manual and demonstration guide for the **MediNexus AI — AI Medical Assistant & Digital Registration System**.
 

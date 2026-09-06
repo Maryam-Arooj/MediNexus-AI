@@ -1,4 +1,4 @@
-# SmartCare — Setup Guide
+# MediNexus AI — Setup Guide
 
 ## Prerequisites
 
@@ -33,12 +33,13 @@ copy .env.example .env   # Windows
 ```
 
 Edit `backend/.env`:
-```
+```ini
 DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/smartcare
 PORT=3001
+JWT_SECRET=your_secure_random_jwt_secret_here
 ```
 
-> **Never commit `.env` to git.** It is listed in `.gitignore`.
+> **Never commit `.env` to git.** It is strictly listed in `.gitignore`. A secure default key is used if `JWT_SECRET` is left blank.
 
 ---
 
@@ -50,7 +51,7 @@ cd backend
 # Generate Prisma client + apply migrations
 npx prisma migrate dev
 
-# Seed 4 demo patients (idempotent)
+# Seed database verification (idempotent)
 npm run db:seed
 ```
 
@@ -66,10 +67,20 @@ npm run dev
 Expected output:
 ```
 ✅ PostgreSQL connected
-🚀 SmartCare backend running at http://localhost:3001
+🚀 MediNexus AI backend running at http://localhost:3001
+   Health: http://localhost:3001/api/health
+   Patients: http://localhost:3001/api/patients
 ```
 
-Verify: open `http://localhost:3001/api/health` — should show `"database": "PostgreSQL — connected"`.
+Verify: Open `http://localhost:3001/api/health` — should return:
+```json
+{
+  "success": true,
+  "status": "ok",
+  "api": "MediNexus AI Backend",
+  "database": "PostgreSQL — connected"
+}
+```
 
 ---
 
@@ -83,17 +94,20 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-The Vite dev server proxies `/api/*` requests to the backend on port 3001.
+The Vite development server automatically proxies `/api/*` requests to the Express backend on port 3001.
 
 ---
 
-## 6. Quick Verification
+## 6. Quick Verification Walkthrough
 
-1. **Health check:** `GET http://localhost:3001/api/health`
-2. **Dashboard:** Navigate to Screen 4 — should show 4 seeded patients
-3. **Register:** Submit Screen 1 form or click "Fever Case" demo — creates a real DB record
-4. **Refresh browser** — dashboard still shows all patients
-5. **Doctor review:** Open a report, edit notes, approve — persists after refresh
+1. **Splash Screen:** Open `http://localhost:5173` — displays the 3-second animated MediNexus AI branding screen.
+2. **Account Registration:** Click **Register** on the Login screen, choose **Patient** or **Doctor**, fill out the form, and register.
+3. **Login:** Log in with your newly registered CNIC or Email + Password.
+4. **Role Selection:** Select **Patient** to enter the OPD Pre-Registration flow or **Doctor** to enter the Doctor Dashboard.
+5. **Patient Pre-Registration:** On Screen 1, enter symptoms (or click the quick "Fever Case" demo button) and click **Start AI Check**.
+6. **AI Triage & Slip:** Inspect the AI Triage Assessment on Screen 2, then generate and print the Digital Parchi on Screen 3.
+7. **Doctor Review:** Log out and log in using doctor credentials, open the Doctor Dashboard (Screen 4), open the patient report, edit clinical notes, and click **Approve Triage**.
+8. **Persistence:** Refresh the browser — all patient records, doctor notes, and approvals remain persisted in PostgreSQL.
 
 ---
 
@@ -105,13 +119,11 @@ cd backend
 npm run build
 npm start
 
-# Frontend build
+# Frontend production build
 cd ..
 npm run build
 npm run preview   # serves dist/ on port 4173
 ```
-
-For production, configure your reverse proxy to forward `/api` to the backend.
 
 ---
 
@@ -119,26 +131,38 @@ For production, configure your reverse proxy to forward `/api` to the backend.
 
 | Issue | Fix |
 |---|---|
-| `Cannot reach the SmartCare backend` | Ensure backend is running on port 3001 |
-| `Failed to connect to PostgreSQL` | Check PostgreSQL is running; verify `DATABASE_URL` |
-| `Migration failed` | Ensure database exists and user has CREATE privileges |
-| Port 5173 in use | Vite will try the next available port |
-| Empty dashboard | Run `npm run db:seed` in backend |
+| `Cannot reach the MediNexus AI backend` | Ensure the backend server is running on port 3001 (`npm run dev` in `backend/`) |
+| `Failed to connect to PostgreSQL` | Verify local PostgreSQL service is started and credentials in `backend/.env` match |
+| `Migration failed` | Ensure the database exists and your PostgreSQL user has `CREATE` privileges |
+| Port 5173 in use | Vite will automatically select the next available port (e.g. 5174) |
+| `Invalid credentials` | Verify you typed the exact CNIC or Email and password used during registration |
 
 ---
 
 ## Project Structure
 
 ```
-SmartCare/
-├── src/                  # React frontend
+MediNexus-AI/
+├── src/                          # React frontend
+│   ├── components/               # Clinical screens (1-4) & Navbar
+│   │   └── auth/                 # Splash, Login, Register, RoleSelect
+│   ├── context/                  # AuthContext (JWT session management)
+│   ├── api/                      # client.ts (REST API client)
+│   ├── types/                    # TypeScript interfaces (medical, auth)
+│   └── data/                     # Mock symptom categories & duration options
 ├── backend/
-│   ├── prisma/           # Schema, migrations, seed
-│   └── src/              # Express API
-├── README.md
-├── SETUP.md              # This file
-├── REQUIREMENTS.md
-├── ARCHITECTURE.md
-├── API.md
-└── DATABASE.md
+│   ├── prisma/                   # schema.prisma, migrations, seed.ts
+│   └── src/
+│       ├── controllers/          # auth & patients controllers
+│       ├── routes/               # /api/health, /api/auth, /api/patients
+│       ├── middleware/           # authMiddleware, errorHandler
+│       ├── services/             # patients.service.ts
+│       └── triage/               # evaluateMedicalTriage.ts
+├── README.md                     # Main project overview
+├── USER_GUIDE.md                 # Complete step-by-step user manual
+├── SETUP.md                      # This file
+├── REQUIREMENTS.md               # Functional & non-functional requirements
+├── ARCHITECTURE.md               # System architecture & component design
+├── API.md                        # REST API endpoint reference
+└── DATABASE.md                   # Database schema & Prisma models
 ```
