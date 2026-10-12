@@ -2,6 +2,7 @@ import prisma from '../lib/prisma';
 import { conflict, notFound } from '../lib/httpError';
 import { AuthUser } from '../middleware/auth';
 import { patientInclude, toPatientRecord } from './patientRecord';
+import { CaseSummaryInput, summarizeCase } from '../ai/caseSummary';
 
 const clean = (v: string | undefined | null): string | null => {
   const t = (v ?? '').trim();
@@ -108,4 +109,28 @@ export async function reopenCase(doctor: AuthUser, publicId: string) {
   });
   if (res.count === 0) throw conflict('Only approved cases can be reopened.');
   return toPatientRecord(await loadCase(publicId), doctor.role);
+}
+
+/**
+ * AI draft summary for the review modal. Builds a DE-IDENTIFIED input (no name, CNIC, phone,
+ * email, patient id or token) and asks the LLM for an SBAR draft. Nothing is stored.
+ */
+export function caseSummaryInput(p: Awaited<ReturnType<typeof loadCase>>): CaseSummaryInput {
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  return {
+    age: p.age,
+    gender: p.gender,
+    symptoms: strings(p.symptoms),
+    duration: p.duration,
+    department: p.department,
+    riskLevel: p.triage?.riskLevel ?? null,
+    riskReason: p.triage?.riskReason ?? null,
+    ruleFlags: strings(p.triage?.redFlags),
+    ruleConditionsToConsider: strings(p.triage?.possibleConditions),
+  };
+}
+
+export async function aiCaseSummary(publicId: string) {
+  const p = await loadCase(publicId);
+  return summarizeCase(caseSummaryInput(p));
 }

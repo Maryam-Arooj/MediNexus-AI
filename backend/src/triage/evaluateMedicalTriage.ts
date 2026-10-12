@@ -16,6 +16,7 @@ import {
   RiskLevel,
   SYMPTOMS_BY_DEPARTMENT,
 } from './triageConfig';
+import { DANGER_SIGNS, emergencyFlag } from './emergencyRules';
 
 export interface TriageInput {
   name: string;
@@ -23,6 +24,8 @@ export interface TriageInput {
   gender: string;
   symptoms: string[];
   duration: string;
+  /** Danger signs the patient ticked (ids from emergencyRules). Any sign forces High priority. */
+  dangerSigns?: string[];
 }
 
 export interface TriageOutput {
@@ -59,6 +62,14 @@ export function evaluateMedicalTriage(input: TriageInput): TriageOutput {
     inDept('Dermatology', s) > inDept('General Medicine', s) ? 'Dermatology' : 'General Medicine';
 
   const hits: RuleHit[] = [];
+
+  // ── Emergency danger signs (checked first; always the highest priority) ──
+  const dangerSigns = (input.dangerSigns ?? []).filter((id) => DANGER_SIGNS.some((d) => d.id === id));
+  for (const id of dangerSigns) {
+    const sign = DANGER_SIGNS.find((d) => d.id === id)!;
+    hits.push({ level: 'High', reason: `Emergency danger sign reported: ${sign.label}`, flag: emergencyFlag(id)! });
+  }
+  const isEmergency = dangerSigns.length > 0;
 
   // ── General Medicine rules ──
   if (has('Fever') && has('Cough') && longDuration) {
@@ -141,7 +152,11 @@ export function evaluateMedicalTriage(input: TriageInput): TriageOutput {
   const emergencyNote =
     'If you develop severe breathing difficulty, chest pain, confusion, fainting or a rapidly spreading rash, go to the Emergency department immediately.';
   let recommendedAction: string;
-  if (riskLevel === 'High') {
+  if (isEmergency) {
+    recommendedAction =
+      'EMERGENCY: Go to the nearest Emergency department now or call Rescue 1122. Do not wait in the OPD queue. ' +
+      `Show this slip to the staff. If you are sent back to the OPD, your token is for ${opd}.`;
+  } else if (riskLevel === 'High') {
     recommendedAction = `Priority consultation: go to ${opd} now and show this slip — your case is flagged for priority review. Avoid self-medication. ${emergencyNote}`;
   } else if (riskLevel === 'Medium') {
     recommendedAction = `Same-day consultation at ${opd}. Drink enough fluids and note any change in your symptoms. ${emergencyNote}`;

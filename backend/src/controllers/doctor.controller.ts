@@ -21,3 +21,8 @@ export async function reopen(req: Request, res: Response) {
   const id = publicIdParam.parse(req.params.id);
   res.json({ success: true, data: await svc.reopenCase(req.user!, id) });
 }
+
+export async function aiSummary(req: Request, res: Response) {
+  const id = publicIdParam.parse(req.params.id);
+  res.json({ success: true, data: await svc.aiCaseSummary(id) });
+}

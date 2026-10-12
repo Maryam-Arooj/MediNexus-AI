@@ -34,6 +34,9 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     status = 400;
     details = zodDetails(err);
     message = Object.values(details)[0] || 'Invalid input.';
+  } else if ((err as { type?: string })?.type === 'entity.too.large') {
+    status = 413;
+    message = 'The upload is too large. The maximum file size is 4 MB.';
   } else if (err instanceof SyntaxError && 'body' in (err as object)) {
     status = 400;
     message = 'The request body is not valid JSON.';

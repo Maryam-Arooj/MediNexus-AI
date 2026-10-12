@@ -20,7 +20,7 @@ describe('creating a case', () => {
     expect(row.triage).not.toBeNull();
     expect(row.review).not.toBeNull();
     expect(row.triage!.confidenceScore).toBeNull();
-    expect(row.triage!.engineVersion).toBe('rules-v2');
+    expect(row.triage!.engineVersion).toBe('rules-v3');
   });
 
   it.each([

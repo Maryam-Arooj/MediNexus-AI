@@ -1,4 +1,5 @@
 import { Prisma, Role } from '@prisma/client';
+import { dangerSignsFromFlags } from '../triage/emergencyRules';
 
 export const patientInclude = {
   triage: true,
@@ -26,6 +27,7 @@ export function toPatientRecord(p: PatientWithRelations, viewer: Role) {
   const r = p.review;
   const status = (r?.status as ReviewStatus) || 'Pending Review';
   const effectiveAction = r?.recommendedActionOverride || t?.recommendedAction || '';
+  const dangerSigns = t ? dangerSignsFromFlags(asStringArray(t.redFlags)) : [];
 
   return {
     id: p.patientId,
@@ -39,6 +41,8 @@ export function toPatientRecord(p: PatientWithRelations, viewer: Role) {
     duration: p.duration,
     department: p.department,
     opdRoom: p.assignedRoom,
+    dangerSigns,
+    emergency: dangerSigns.length > 0,
     analysis: t
       ? {
           engineVersion: t.engineVersion,

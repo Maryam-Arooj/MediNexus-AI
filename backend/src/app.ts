@@ -6,7 +6,8 @@ import patientsRouter from './routes/patients';
 import doctorRouter from './routes/doctor';
 import triageRouter from './routes/triage';
 import healthRouter from './routes/health';
-import { authRateLimiter } from './middleware/rateLimit';
+import { aiRouter } from './routes/ai';
+import { aiRateLimiter, authRateLimiter } from './middleware/rateLimit';
 import { errorHandler } from './middleware/errorHandler';
 
 export function createApp(config: AppConfig = getConfig()) {
@@ -14,6 +15,8 @@ export function createApp(config: AppConfig = getConfig()) {
   app.disable('x-powered-by');
 
   app.use(cors({ origin: config.corsOrigins }));
+  // Report/prescription uploads (base64, max 4 MB file) need a larger body limit on this ONE route only.
+  app.use('/api/ai/document', express.json({ limit: '6mb' }));
   app.use(express.json({ limit: '100kb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -28,6 +31,7 @@ export function createApp(config: AppConfig = getConfig()) {
   app.use('/api/auth', authRouter(authRateLimiter(config.authRateLimitMax, config.authRateLimitWindowMs)));
   app.use('/api/patients', patientsRouter);
   app.use('/api/doctor', doctorRouter);
+  app.use('/api/ai', aiRouter(aiRateLimiter(config.aiRateLimitMax, config.aiRateLimitWindowMs)));
 
   app.use((_req, res) => {
     res.status(404).json({ success: false, error: 'Route not found.' });

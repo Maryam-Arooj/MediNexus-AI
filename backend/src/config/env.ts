@@ -18,6 +18,29 @@ export interface AppConfig {
   corsOrigins: string[];
   authRateLimitMax: number;
   authRateLimitWindowMs: number;
+  aiRateLimitMax: number;
+  aiRateLimitWindowMs: number;
+}
+
+/** AI (Google Gemini) settings. Optional: without GEMINI_API_KEY every AI feature switches off cleanly. */
+export interface AiConfig {
+  apiKey: string | null;
+  model: string;
+  fallbackModel: string | null;
+  timeoutMs: number;
+}
+
+/** Read on every call so tests (and a restarted server) always see the current values. */
+export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
+  const key = (env.GEMINI_API_KEY || '').trim();
+  const model = (env.GEMINI_MODEL || '').trim() || 'gemini-2.5-flash';
+  const fallback = (env.GEMINI_FALLBACK_MODEL ?? 'gemini-2.5-flash-lite').trim();
+  return {
+    apiKey: key && !/^your|replace|placeholder/i.test(key) ? key : null,
+    model,
+    fallbackModel: fallback && fallback !== model ? fallback : null,
+    timeoutMs: parseInt(env.GEMINI_TIMEOUT_MS || '25000', 10),
+  };
 }
 
 export class ConfigError extends Error {}
@@ -56,6 +79,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       .filter(Boolean),
     authRateLimitMax: parseInt(env.AUTH_RATE_LIMIT_MAX || '20', 10),
     authRateLimitWindowMs: parseInt(env.AUTH_RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),
+    aiRateLimitMax: parseInt(env.AI_RATE_LIMIT_MAX || '30', 10),
+    aiRateLimitWindowMs: parseInt(env.AI_RATE_LIMIT_WINDOW_MS || String(10 * 60 * 1000), 10),
   };
 }
 

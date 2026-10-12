@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ALL_SYMPTOMS, DURATION_OPTIONS, GENDERS } from '../triage/triageConfig';
+import { DANGER_SIGN_IDS } from '../triage/emergencyRules';
 
 /** Pakistani CNIC: 13 digits, stored as #####-#######-#. Accepts input with or without dashes. */
 export function normalizeCnic(raw: string): string | null {
@@ -86,6 +87,13 @@ export const caseInputSchema = z
       .max(10, 'Too many symptoms selected.')
       .refine((a) => new Set(a).size === a.length, 'Each symptom can only be selected once.'),
     duration: z.enum(DURATION_OPTIONS, { errorMap: () => ({ message: 'Please select how long you have had symptoms.' }) }),
+    // Emergency danger signs ticked by the patient (optional; any sign forces High priority).
+    dangerSigns: z
+      .array(z.enum(DANGER_SIGN_IDS, { errorMap: () => ({ message: 'Unknown danger sign.' }) }))
+      .max(DANGER_SIGN_IDS.length)
+      .optional()
+      .default([])
+      .transform((a) => [...new Set(a)]),
     clientRequestId: z
       .string()
       .trim()

@@ -2,10 +2,13 @@
  * Single source of truth for the triage options. The frontend loads these from
  * GET /api/triage/options, so the UI and the rule engine can never drift apart.
  */
+import { dangerSignOptions } from './emergencyRules';
+
 export type Department = 'General Medicine' | 'Dermatology';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 
-export const ENGINE_VERSION = 'rules-v2';
+// rules-v3 = rules-v2 + emergency danger signs (see emergencyRules.ts).
+export const ENGINE_VERSION = 'rules-v3';
 
 export const DEPARTMENTS: Record<Department, { tokenPrefix: string; room: string }> = {
   'General Medicine': { tokenPrefix: 'GM', room: 'Room 104 — General Medicine OPD' },
@@ -46,6 +49,7 @@ export const GENDERS = ['Male', 'Female', 'Other'] as const;
 export function triageOptions() {
   return {
     engineVersion: ENGINE_VERSION,
+    dangerSigns: dangerSignOptions(),
     departments: (Object.keys(DEPARTMENTS) as Department[]).map((name) => ({
       name,
       room: DEPARTMENTS[name].room,

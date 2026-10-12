@@ -7,6 +7,9 @@ import { evaluateMedicalTriage } from '../triage/evaluateMedicalTriage';
 import { DEPARTMENTS, Department } from '../triage/triageConfig';
 import { allocatePatientId, allocateToken } from './counters';
 import { patientInclude, toPatientRecord } from './patientRecord';
+import { dangerSignsFromFlags } from '../triage/emergencyRules';
+
+const asFlags = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
 const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
@@ -21,6 +24,7 @@ function triageFor(input: CaseInput, displayName: string) {
     gender: input.gender,
     symptoms: input.symptoms,
     duration: input.duration,
+    dangerSigns: input.dangerSigns,
   });
 }
 
@@ -129,7 +133,9 @@ export async function updateMyCase(user: AuthUser, publicId: string, input: Case
     input.age === p.age &&
     input.gender === p.gender &&
     input.duration === p.duration &&
-    sameSymptoms
+    sameSymptoms &&
+    JSON.stringify([...dangerSignsFromFlags(asFlags(p.triage?.redFlags))].sort()) ===
+      JSON.stringify([...input.dangerSigns].sort())
   ) {
     return { record: toPatientRecord(p, user.role), changed: false };
   }
