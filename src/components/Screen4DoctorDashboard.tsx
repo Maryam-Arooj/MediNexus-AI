@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Stethoscope, Filter, CheckCircle2, AlertTriangle, Clock, Edit3, X, ShieldAlert, Search, Check, Save, Loader2,
-  RefreshCw, AlertCircle, RotateCcw, Info,
+  RefreshCw, AlertCircle, RotateCcw, Info, Siren, Sparkles,
 } from 'lucide-react';
-import type { Department, PatientRecord, PatientStatus } from '../types/medical';
-import { approveCase, fetchDoctorQueue, reopenCase, saveReview } from '../api/client';
+import type { CaseSummary, Department, PatientRecord, PatientStatus } from '../types/medical';
+import { approveCase, fetchAiCaseSummary, fetchDoctorQueue, reopenCase, saveReview } from '../api/client';
+import { AiBadge, AiNotice } from './ai/AiNotice';
 import { formatDateTime } from '../lib/format';
 import { StatusBadge } from './caseUi';
 
@@ -26,6 +27,10 @@ export const Screen4DoctorDashboard: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [modalInfo, setModalInfo] = useState<string | null>(null);
+  const [aiSummary, setAiSummary] = useState<CaseSummary | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const openCaseId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -45,7 +50,9 @@ export const Screen4DoctorDashboard: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return patients.filter((p) => {
+    // Open emergency cases always appear first; otherwise keep the server order (newest first).
+    const urgent = (p: PatientRecord) => (p.emergency && p.status !== 'Approved' ? 0 : 1);
+    return [...patients].sort((x, y) => urgent(x) - urgent(y)).filter((p) => {
       if (departmentFilter !== 'All' && p.department !== departmentFilter) return false;
       if (statusFilter !== 'All' && p.status !== statusFilter) return false;
       if (!q) return true;
@@ -70,11 +77,31 @@ export const Screen4DoctorDashboard: React.FC = () => {
     setEditAction(p.analysis?.recommendedAction ?? '');
     setModalError(null);
     setModalInfo(null);
+    setAiSummary(null);
+    setAiError(null);
+    openCaseId.current = p.id;
+  };
+
+  // AI draft summary (Gemini). De-identified input on the server; nothing is stored.
+  const generateAiSummary = async () => {
+    if (!selected || aiLoading) return;
+    const id = selected.id;
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const s = await fetchAiCaseSummary(id);
+      if (openCaseId.current === id) setAiSummary(s); // ignore a late reply for a case that was closed
+    } catch (err) {
+      if (openCaseId.current === id) setAiError(err instanceof Error ? err.message : 'The AI summary is unavailable.');
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const closeReport = () => {
     if (isSaving) return;
     setSelected(null);
+    openCaseId.current = null;
     setIsEditing(false);
   };
 
@@ -268,6 +295,12 @@ export const Screen4DoctorDashboard: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-3.5 px-4">
+                        {p.emergency && (
+                          <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-black uppercase text-white" data-emergency="true">
+                            <Siren className="h-3 w-3" /> Emergency
+                          </span>
+                        )}
+                        <br className={p.emergency ? '' : 'hidden'} />
                         <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${level === 'High' ? 'bg-rose-100 text-rose-700 border border-rose-200' : level === 'Medium' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
                           {level ?? 'n/a'}
                         </span>
@@ -381,12 +414,65 @@ export const Screen4DoctorDashboard: React.FC = () => {
                     </div>
                   )}
 
+                  {selected.emergency && (
+                    <div className="flex items-start gap-2 rounded-xl border-2 border-rose-500 bg-rose-50 p-3 text-xs text-rose-900">
+                      <Siren className="h-5 w-5 flex-shrink-0 text-rose-600" />
+                      <div>
+                        <strong>Emergency danger sign reported by the patient</strong> (fixed safety rule). The patient was advised to go to the
+                        Emergency department / call 1122. Please assess immediately.
+                      </div>
+                    </div>
+                  )}
+
                   {a.handoverSummary && (
                     <div>
                       <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-2">Handover Summary (auto-generated from patient input)</h3>
                       <p className="text-xs text-slate-700 font-mono leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-200">{a.handoverSummary}</p>
                     </div>
                   )}
+
+                  <div id="ai-summary-panel" className="rounded-xl border-2 border-violet-200 bg-violet-50/40 p-4">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-violet-900">
+                        AI case summary (SBAR draft) <AiBadge />
+                      </h3>
+                      <button
+                        type="button"
+                        id="btn-ai-summary"
+                        onClick={generateAiSummary}
+                        disabled={aiLoading}
+                        className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
+                      >
+                        {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        {aiSummary ? 'Regenerate' : 'Generate AI summary'}
+                      </button>
+                    </div>
+                    {!aiSummary && !aiError && !aiLoading && (
+                      <p className="text-[11px] text-slate-500">Sends only age, gender, symptoms, duration and the rule result to the AI — no name, CNIC or contact details.</p>
+                    )}
+                    {aiError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">{aiError}</p>}
+                    {aiSummary && (
+                      <div id="ai-summary" className="space-y-2 text-xs text-slate-800">
+                        {([['S — Situation', aiSummary.situation], ['B — Background', aiSummary.background], ['A — Assessment', aiSummary.assessment], ['R — Recommendation (verify)', aiSummary.recommendation]] as const).map(([k, v]) =>
+                          v ? (
+                            <div key={k}>
+                              <span className="block text-[10px] font-bold uppercase text-violet-700">{k}</span>
+                              <span>{v}</span>
+                            </div>
+                          ) : null
+                        )}
+                        {aiSummary.questionsToAsk.length > 0 && (
+                          <div>
+                            <span className="block text-[10px] font-bold uppercase text-violet-700">Questions to ask</span>
+                            <ul className="list-disc pl-4">
+                              {aiSummary.questionsToAsk.map((q) => <li key={q}>{q}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        <AiNotice text="Draft for the doctor — verify before use. Based only on patient-reported data and the rule result; no examination or vitals." />
+                      </div>
+                    )}
+                  </div>
 
                   <div className="p-4 rounded-xl border-2 border-emerald-100 bg-emerald-50/30">
                     <div className="flex items-center justify-between mb-2">

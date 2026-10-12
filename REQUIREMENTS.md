@@ -8,7 +8,8 @@ OPD registration counters create long queues, patients reach the wrong departmen
 
 1. Secure accounts with separate **patient** and **doctor** access.
 2. Digital pre-registration with symptom capture.
-3. Transparent, rule-based triage (no ML or LLM, not a diagnosis).
+3. Transparent, rule-based triage and **rule-based emergency detection** (deterministic, not a diagnosis).
+7. AI assistance (Google Gemini LLM), always labelled as a suggestion: symptom understanding in English/Urdu/Roman Urdu, possible conditions, preliminary guidance, lab report / prescription explanation, and a doctor case summary.
 4. A digital parchi with token, room and live review status.
 5. A doctor dashboard to review, annotate and approve cases.
 6. Reliable persistence in PostgreSQL.
@@ -40,6 +41,13 @@ OPD registration counters create long queues, patients reach the wrong departmen
 - Edit the patient-facing plan and private clinical notes. Only changed fields are saved.
 - Approve, with the approver and time recorded from the logged-in doctor. Approved cases are locked until reopened.
 
+### AI and emergency safety
+
+- Emergency danger signs (checklist + phrase detection) never depend on the AI and always force High priority with "go to Emergency / call 1122" guidance.
+- The AI never sets priority, department or token, never diagnoses, and never recommends a medicine or dose (server-side filter).
+- Only de-identified data is sent to the AI; uploads and AI output are not stored; the key never reaches the browser or logs.
+- Without a key, or if the AI fails, the app keeps working and says the AI is unavailable (never fake AI output).
+
 ## Non-functional requirements
 
 | Area | Requirement |
@@ -52,4 +60,4 @@ OPD registration counters create long queues, patients reach the wrong departmen
 
 ## Out of scope
 
-ML/LLM diagnosis, vital signs, prescriptions or pharmacy, billing, other departments, QR hardware, daily token reset.
+Trained/validated ML diagnosis, AI-decided priority, storing AI output, vital signs, prescriptions or pharmacy, billing, other departments, QR hardware, daily token reset.

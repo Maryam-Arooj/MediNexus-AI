@@ -24,6 +24,9 @@ Base URL: `http://localhost:3001/api` (the frontend calls `/api/...` through the
 | PUT | `/doctor/patients/:id/review` | **DOCTOR** | Save notes / changed plan (only changed fields are written) |
 | POST | `/doctor/patients/:id/approve` | **DOCTOR** | Approve (approver = logged-in doctor) |
 | POST | `/doctor/patients/:id/reopen` | **DOCTOR** | Undo an approval (back to *Under Review*) |
+| POST | `/doctor/patients/:id/ai-summary` | **DOCTOR**, AI rate limit | AI SBAR draft for the review modal (not stored) |
+| POST | `/ai/symptoms` | **PATIENT**, AI rate limit | Emergency rules + AI understanding of free text (not stored) |
+| POST | `/ai/document` | PATIENT / DOCTOR, AI rate limit | AI explanation of a lab report or prescription (not stored) |
 
 `:id` is the public patient id, e.g. `SC-2026-0007`.
 
@@ -102,3 +105,26 @@ Same body. Returns `meta.changed=false` with no write when nothing changed. Retu
   - Approved cases return **409**.
 - `POST /doctor/patients/:id/approve` takes `{ "clinicalNotes"?: string }`. Any client-sent `approvedBy` or `status` is ignored. Approving twice returns **409**.
 - `POST /doctor/patients/:id/reopen` clears the approval (who and when) and sets *Under Review*.
+
+## AI endpoints (Google Gemini; nothing is stored)
+
+`GET /triage/options` now also returns `dangerSigns: [{ id, label, labelUr }]` and `aiEnabled: boolean`.
+`POST /patients` and `PUT /patients/:id` accept an optional `dangerSigns: string[]` (ids from that list). Any sign forces **High** priority and an `EMERGENCY SIGN: …` rule flag. `PatientRecord` includes `dangerSigns` and `emergency`.
+
+### POST /ai/symptoms (PATIENT)
+Body `{ "text": "mujhe 3 din se bukhar aur khansi hai" }` (3–800 characters). Always **200**:
+```json
+{ "emergency": { "isEmergency": false, "matched": [], "guidance": [] },
+  "ai": { "summary": "…", "symptoms": ["Fever", "Cough"], "duration": "3 - 5 days", "age": null, "gender": null,
+          "otherSymptoms": [], "possibleConditions": [{ "name": "…", "likelihood": "more likely", "reason": "…" }],
+          "guidance": { "selfCare": [], "seeDoctorIf": [], "avoid": [] }, "emergencyConcern": false, "unclear": false,
+          "disclaimer": "AI-generated suggestion. Not a medical diagnosis…" },
+  "aiStatus": "ok", "aiMessage": null }
+```
+`emergency` comes from the deterministic rules and is present even when `aiStatus` is `disabled` (no key) or `unavailable` (AI error, timeout or quota), in which case `ai` is `null`.
+
+### POST /ai/document (PATIENT or DOCTOR)
+Body: either `{ "fileBase64": "…", "mimeType": "image/jpeg" | "image/png" | "application/pdf" }` (max 4 MB; the real type is checked from the file bytes) **or** `{ "text": "…" }` (10–8000 characters). Returns `{ documentType, summary, tests[], medicines[], questionsForDoctor[], warnings[], disclaimer, medicineNotice }`. Medicines are transcribed as written. `400` bad file, `413` too large, `503` AI not configured or unavailable.
+
+### POST /doctor/patients/:id/ai-summary (DOCTOR)
+No body. Sends only age, gender, symptoms, duration, department, rule priority, reason, flags and the rule's conditions list. Returns `{ situation, background, assessment, recommendation, questionsToAsk[], disclaimer }`. `404` unknown case, `503` AI not configured or unavailable. `429` on any AI endpoint means the per-user AI limit was reached.

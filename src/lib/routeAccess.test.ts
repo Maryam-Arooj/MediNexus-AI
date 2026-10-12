@@ -14,6 +14,9 @@ describe('frontend route guard', () => {
   it('patients can open patient pages but are redirected away from the doctor dashboard', () => {
     expect(resolveAccess('/patient', 'PATIENT')).toBeNull();
     expect(resolveAccess('/patient/cases/SC-2026-0001/parchi', 'PATIENT')).toBeNull();
+    expect(resolveAccess('/patient/documents', 'PATIENT')).toBeNull();
+    expect(resolveAccess('/patient/documents', 'DOCTOR')).toBe('/doctor');
+    expect(resolveAccess('/patient/documents', null)).toBe('/login');
     expect(resolveAccess('/doctor', 'PATIENT')).toBe('/patient');
     expect(resolveAccess('/doctor/anything', 'PATIENT')).toBe('/patient');
   });

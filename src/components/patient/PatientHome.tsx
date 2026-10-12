@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertCircle, ClipboardList, FileText, Loader2, Pencil, Plus, RefreshCw } from 'lucide-react';
+import { AlertCircle, ClipboardList, FileSearch, FileText, Loader2, Pencil, Plus, RefreshCw } from 'lucide-react';
 import { fetchMyCases } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import type { PatientRecord } from '../../types/medical';
@@ -31,7 +31,14 @@ export const PatientHome: React.FC = () => {
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">Welcome, {user?.fullName}</h1>
           <p className="text-xs text-slate-500 mt-1">Your OPD pre-registrations and their doctor-review status.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            id="btn-documents"
+            onClick={() => navigate('/patient/documents')}
+            className="px-3 py-2 rounded-lg border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-800 text-xs font-semibold flex items-center gap-1.5"
+          >
+            <FileSearch className="w-3.5 h-3.5" /> Understand a report / prescription
+          </button>
           <button onClick={load} className="px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>

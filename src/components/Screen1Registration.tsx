@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Sparkles, AlertCircle, ArrowRight, ShieldCheck, HeartPulse, Loader2, Info, RefreshCw } from 'lucide-react';
-import type { CaseFormInput, Gender } from '../types/medical';
+import { Sparkles, AlertCircle, ArrowRight, ShieldCheck, HeartPulse, Loader2, Info, RefreshCw, Siren } from 'lucide-react';
+import type { CaseFormInput, EmergencyResult, Gender, SymptomAnalysis } from '../types/medical';
+import { SymptomAssistant } from './ai/SymptomAssistant';
+import { EmergencyAlert } from './ai/EmergencyAlert';
 import { createCase, fetchCase, updateCase, ApiError } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useTriageOptions } from '../hooks/useTriageOptions';
@@ -13,7 +15,7 @@ interface Screen1Props {
   caseId?: string;
 }
 
-const EMPTY: CaseFormInput = { name: '', age: '', gender: '', symptoms: [], duration: '' };
+const EMPTY: CaseFormInput = { name: '', age: '', gender: '', symptoms: [], duration: '', dangerSigns: [] };
 
 // Example symptom sets for demos. They only FILL the form (no name, no automatic submission).
 const EXAMPLES: Record<'fever' | 'skin', Pick<CaseFormInput, 'symptoms' | 'duration'>> = {
@@ -30,6 +32,7 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingCase, setLoadingCase] = useState(mode === 'edit');
   const [locked, setLocked] = useState(false);
+  const [alert, setAlert] = useState<EmergencyResult | null>(null);
   // One id per form session: a double click or network retry can never create a second case.
   const requestId = useRef(newRequestId());
 
@@ -39,7 +42,7 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
     fetchCase(caseId)
       .then((c) => {
         if (!alive) return;
-        setFormData({ name: c.name, age: c.age, gender: c.gender, symptoms: c.symptoms, duration: c.duration });
+        setFormData({ name: c.name, age: c.age, gender: c.gender, symptoms: c.symptoms, duration: c.duration, dangerSigns: c.dangerSigns ?? [] });
         setLocked(!c.canEdit);
       })
       .catch((e: Error) => alive && setError(e.message))
@@ -60,6 +63,39 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
       symptoms: prev.symptoms.includes(name) ? prev.symptoms.filter((s) => s !== name) : [...prev.symptoms, name],
     }));
     clearErrors();
+  };
+
+  const dangerOptions = options?.dangerSigns ?? [];
+  const ticked = formData.dangerSigns ?? [];
+
+  // Ticking a danger sign shows the emergency alert immediately (deterministic rule, no AI involved).
+  const toggleDanger = (id: string) => {
+    const adding = !ticked.includes(id);
+    setFormData((prev) => {
+      const cur = prev.dangerSigns ?? [];
+      return { ...prev, dangerSigns: cur.includes(id) ? cur.filter((d) => d !== id) : [...cur, id] };
+    });
+    const sign = dangerOptions.find((d) => d.id === id);
+    if (adding && sign) setAlert({ isEmergency: true, matched: [{ ...sign, source: 'checklist' }], guidance: [] });
+  };
+
+  // AI understood the free text: pre-fill the form. The patient still reviews everything before submitting.
+  const applyAi = (a: SymptomAnalysis) => {
+    setFormData((prev) => ({
+      ...prev,
+      symptoms: a.symptoms.length ? a.symptoms : prev.symptoms,
+      duration: a.duration ?? prev.duration,
+      age: a.age ?? prev.age,
+      gender: a.gender ?? prev.gender,
+    }));
+    clearErrors();
+  };
+
+  // Rules (or the AI) found possible danger signs in the text: tick the matching boxes and alert.
+  const handleEmergency = (e: EmergencyResult) => {
+    const ids = e.matched.map((m) => m.id).filter((id) => dangerOptions.some((d) => d.id === id));
+    if (ids.length) setFormData((prev) => ({ ...prev, dangerSigns: [...new Set([...(prev.dangerSigns ?? []), ...ids])] }));
+    setAlert(e);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -105,8 +141,9 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
             {isEdit ? 'Edit Your Symptoms' : 'Patient Pre-Registration & Triage'}
           </h1>
           <p className="text-emerald-100 text-sm sm:text-base leading-relaxed">
-            Enter your symptoms before you reach the hospital. You get a digital token (parchi) and are routed to the
-            right OPD room. A rule-based check sorts urgency; a doctor always makes the medical decisions.
+            Describe your symptoms in your own words (AI helps fill the form) or pick them below. You get a digital token
+            (parchi) and are routed to the right OPD room. Fixed safety rules check for emergencies and sort urgency; a
+            doctor always makes the medical decisions.
           </p>
           <div className="mt-4 flex flex-wrap gap-4 text-xs text-emerald-200">
             <span className="flex items-center gap-1.5">
@@ -186,6 +223,31 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
             )}
 
             <fieldset disabled={locked || isSubmitting} className="space-y-8">
+              {!isEdit && (
+                <SymptomAssistant aiEnabled={Boolean(options.aiEnabled)} disabled={locked || isSubmitting} onApply={applyAi} onEmergency={handleEmergency} />
+              )}
+
+              {dangerOptions.length > 0 && (
+                <div id="danger-signs" className={`rounded-xl border-2 p-4 ${ticked.length ? 'border-rose-400 bg-rose-50' : 'border-rose-100 bg-rose-50/40'}`}>
+                  <h3 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-rose-900">
+                    <Siren className="h-4 w-4" /> Emergency check — do you have any of these right now?
+                  </h3>
+                  <p className="mb-3 text-xs text-rose-800">
+                    Tick any that apply. These are checked by fixed safety rules (not AI). If you tick one, please go to the Emergency department.
+                  </p>
+                  <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                    {dangerOptions.map((d) => (
+                      <label key={d.id} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-2.5 py-2 text-xs transition ${ticked.includes(d.id) ? 'border-rose-500 bg-white font-semibold text-rose-900' : 'border-rose-100 bg-white/70 text-slate-700 hover:border-rose-300'}`}>
+                        <input type="checkbox" data-danger-sign={d.id} checked={ticked.includes(d.id)} onChange={() => toggleDanger(d.id)} className="mt-0.5 accent-rose-600" />
+                        <span>
+                          {d.label} <span dir="rtl" className="block text-[11px] font-normal text-slate-500">{d.labelUr}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2">1. Basic Information</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -363,6 +425,7 @@ export const Screen1Registration: React.FC<Screen1Props> = ({ mode, caseId }) =>
           </form>
         )}
       </div>
+      {alert && <EmergencyAlert matches={alert.matched} guidance={alert.guidance} onContinue={() => setAlert(null)} onLeave={() => navigate('/patient')} />}
     </div>
   );
 };

@@ -3,6 +3,17 @@
 ```
 React (Vite, :5173) ──/api proxy──► Express (:3001) ──Prisma──► PostgreSQL (:5432)
    router + route guard (UX)          requireAuth → requireRole → ownership check → service → transaction
+                                          │
+                                          └──HTTPS (x-goog-api-key header)──► Google Gemini API (AI features only)
+```
+
+### AI data flow
+```
+Patient text ─► POST /api/ai/symptoms ─► emergencyRules.detectEmergency (RULES, always) ─► EmergencyAlert
+                                     └─► Gemini (text only) ─► zod/safety filters ─► form pre-fill + possible conditions + guidance
+Patient confirms form ─► POST /api/patients ─► rules-v3 (+ danger signs) ─► PostgreSQL ─► result + parchi
+Doctor ─► review modal ─► POST /api/doctor/patients/:id/ai-summary ─► Gemini (de-identified) ─► AI draft box
+Patient file ─► POST /api/ai/document ─► Gemini (vision) ─► validated explanation (nothing stored)
 ```
 
 ## Frontend (`src/`)
@@ -44,6 +55,11 @@ Routes: `/login`, `/register`, `/patient`, `/patient/new`, `/patient/cases/:id`,
 | `services/doctorProvisioning.ts` + `scripts/provisionDoctor.ts` | The only way to create a DOCTOR |
 | `scripts/inspectDatabase.ts` | Read-only DB integrity report |
 | `triage/triageConfig.ts`, `triage/evaluateMedicalTriage.ts` | The single rule engine and its option lists |
+| `triage/emergencyRules.ts` | Deterministic emergency danger signs (checklist ids + English/Urdu/Roman Urdu phrases) |
+| `services/llm.ts` | Gemini REST client: header key, timeout, retry, fallback model, safe 503, no content logging |
+| `ai/symptomAssistant.ts`, `ai/documentExplainer.ts`, `ai/caseSummary.ts` | Prompts, JSON response schemas and server-side validation for each AI feature |
+| `ai/safety.ts` | Shared filters (medicine names / doses removed from guidance), AI disclaimer |
+| `routes/ai.ts`, `controllers/ai.controller.ts` | `/api/ai/*` (login + role + per-user AI rate limit) |
 
 ## Authorization model
 

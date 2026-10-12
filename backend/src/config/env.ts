@@ -28,6 +28,8 @@ export interface AiConfig {
   model: string;
   fallbackModel: string | null;
   timeoutMs: number;
+  /** Override only for automated tests (a local fake Gemini server). Leave unset in real use. */
+  apiBase: string;
 }
 
 /** Read on every call so tests (and a restarted server) always see the current values. */
@@ -40,6 +42,7 @@ export function getAiConfig(env: NodeJS.ProcessEnv = process.env): AiConfig {
     model,
     fallbackModel: fallback && fallback !== model ? fallback : null,
     timeoutMs: parseInt(env.GEMINI_TIMEOUT_MS || '25000', 10),
+    apiBase: (env.GEMINI_API_BASE || '').trim() || 'https://generativelanguage.googleapis.com/v1beta/models',
   };
 }
 

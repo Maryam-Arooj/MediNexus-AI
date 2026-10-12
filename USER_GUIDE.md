@@ -50,13 +50,15 @@ Enter your **CNIC** (with or without dashes) or **email**, then your password, a
 2. Fill in your details:
    - Your **name** is pre-filled from your account (you can change it, e.g. for a family member).
    - Enter your **age** and select your **gender**.
-3. Select your **symptoms**:
+3. *(Optional, AI)* In **Describe how you feel**, type your symptoms in English, Urdu or Roman Urdu and click **Analyse & fill the form**. The AI fills the symptoms, duration and (if you mentioned them) age and gender, and shows *possible conditions* and *preliminary guidance*. These are AI suggestions, not a diagnosis. Check the form before submitting. If the AI is unavailable you'll see a message; just pick your symptoms manually.
+   - **Emergency check:** tick any danger sign you have right now. If you tick one, or your description mentions one (e.g. chest pain, *saans lene mein takleef*), a red alert asks you to go to the Emergency department or call **Rescue 1122**. These checks are fixed safety rules, not AI. If you continue, your case is marked **High** priority with an emergency flag.
+4. Select your **symptoms**:
    - General Medicine (Room 104): Fever, Flu, Headache, Cough, Sore throat, Body pain
    - Dermatology (Room 208): Skin rash, Itching, Redness, Minor skin infection
 
    The "Example symptoms" buttons only fill in sample symptoms. They don't submit anything.
-4. Choose **how long** you've had the symptoms.
-5. Click **Start Triage Check**. The button is disabled while saving, so double clicks can't create duplicates.
+5. Choose **how long** you've had the symptoms.
+6. Click **Start Triage Check**. The button is disabled while saving, so double clicks can't create duplicates.
 
 ## 5. Patient: triage result
 
@@ -88,6 +90,10 @@ My Visits lists **only your** cases, with token, department, priority and status
 - Open its **Parchi**
 - **Edit** a case that is still pending
 
+## 7b. Patient: understand a report or prescription (AI)
+
+On *My Visits*, click **Understand a report / prescription**. Upload a clear JPG, PNG or PDF (max 4 MB) or paste the text, then click **Explain**. You'll see a short summary, test values with *high / low / normal / unclear* flags (compared with the range printed on the report), medicines **copied as written**, and questions to ask your doctor. Nothing is saved. Never start, stop or change a medicine because of this page; ask your doctor or pharmacist.
+
 ## 8. Doctor: log in
 
 Use the doctor email and password set up by the administrator. (For local demos, these are `DEMO_DOCTOR_EMAIL` and `DEMO_DOCTOR_PASSWORD` in `backend\.env`; see SETUP.md, step 6.) You land on the **Physician OPD Triage Dashboard**.
@@ -98,6 +104,10 @@ Use the doctor email and password set up by the administrator. (For local demos,
 - **Filters:** department (All, General Medicine, Dermatology) and status.
 - **Search:** by name, Patient ID, token or symptom.
 - **Table:** click a row or **Open Report**.
+
+### Emergency cases and the AI summary
+
+Open cases where the patient reported an emergency danger sign show a red **EMERGENCY** badge and are listed first. In the review modal, **Generate AI summary** creates an SBAR draft (Situation, Background, Assessment, Recommendation, plus questions to ask). Only age, gender, symptoms, duration and the rule result are sent to the AI (no name or CNIC). It's a draft: verify before use.
 
 ### Review modal
 

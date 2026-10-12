@@ -2,7 +2,7 @@
  * MediNexus AI API client. All calls go to the Express backend via the Vite /api proxy.
  * The JWT is only a session credential — authorization is always enforced by the server.
  */
-import { CaseFormInput, PatientRecord, TriageOptions } from '../types/medical';
+import { CaseFormInput, CaseSummary, DocumentExplanation, PatientRecord, SymptomAssistResponse, TriageOptions } from '../types/medical';
 import { AuthResponse, AuthUser, LoginInput, RegisterInput } from '../types/auth';
 
 const API_BASE = '/api';
@@ -111,5 +111,13 @@ export async function saveReview(id: string, data: { clinicalNotes?: string; rec
 }
 export const approveCase = async (id: string, data: { clinicalNotes?: string }) =>
   (await apiFetch<PatientRecord>(`/doctor/patients/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify(data) })).data;
+// ─── AI (Google Gemini via the backend; the API key never reaches the browser) ─
+export const analyzeSymptoms = async (text: string) =>
+  (await apiFetch<SymptomAssistResponse>('/ai/symptoms', { method: 'POST', body: JSON.stringify({ text }) })).data;
+export const explainDocument = async (input: { fileBase64?: string; mimeType?: string; text?: string }) =>
+  (await apiFetch<DocumentExplanation>('/ai/document', { method: 'POST', body: JSON.stringify(input) })).data;
+export const fetchAiCaseSummary = async (id: string) =>
+  (await apiFetch<CaseSummary>(`/doctor/patients/${encodeURIComponent(id)}/ai-summary`, { method: 'POST' })).data;
+
 export const reopenCase = async (id: string) =>
   (await apiFetch<PatientRecord>(`/doctor/patients/${encodeURIComponent(id)}/reopen`, { method: 'POST' })).data;

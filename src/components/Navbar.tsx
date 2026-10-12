@@ -46,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user, path, activeCaseId, onLogo
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
             MVP
           </span>
-          <span className="text-slate-300 font-medium hidden sm:inline">OPD Digital Registration &amp; Rule-Based Triage</span>
+          <span className="text-slate-300 font-medium hidden sm:inline">AI-Assisted OPD Registration &amp; Decision Support</span>
           <span className="text-slate-400 text-[11px]">• General Medicine &amp; Dermatology</span>
         </div>
         <div className="flex items-center gap-3 ml-auto">

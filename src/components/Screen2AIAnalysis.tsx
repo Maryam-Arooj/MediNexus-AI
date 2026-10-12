@@ -5,6 +5,7 @@ import { navigate } from '../lib/router';
 import { formatDateTime, roomShort } from '../lib/format';
 import { CaseLoadState } from './CaseLoadState';
 import { riskTheme, StatusBadge } from './caseUi';
+import { EmergencyBanner } from './EmergencyBanner';
 
 /** Screen 2 — rule-based triage result for the patient's own case. */
 export const Screen2AIAnalysis: React.FC<{ caseId: string }> = ({ caseId }) => {
@@ -17,13 +18,14 @@ export const Screen2AIAnalysis: React.FC<{ caseId: string }> = ({ caseId }) => {
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
+      <EmergencyBanner record={patient} />
       <div className="mb-6 p-4 rounded-xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <div>
           <div className="text-sm font-bold tracking-tight text-amber-900 uppercase">Rule-based triage — not a diagnosis</div>
           <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-            This result comes from fixed, published rules applied to the symptoms you selected (no machine learning, no
-            examination). It only helps sort urgency and route you to the right OPD. A licensed doctor makes every diagnosis
+            This priority comes from fixed, published rules applied to the symptoms you selected (not AI, no
+            examination). Any AI suggestions you saw while describing your symptoms were only to help fill the form. It only helps sort urgency and route you to the right OPD. A licensed doctor makes every diagnosis
             and treatment decision.
           </p>
         </div>

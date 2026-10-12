@@ -5,6 +5,7 @@ import { navigate } from '../lib/router';
 import { formatDate, formatDateTime, roomShort } from '../lib/format';
 import { CaseLoadState } from './CaseLoadState';
 import { riskTheme, StatusBadge } from './caseUi';
+import { EmergencyBanner } from './EmergencyBanner';
 
 /**
  * Screen 3 — Digital Parchi. Always loaded fresh from the server, so the printed slip shows the
@@ -22,6 +23,7 @@ export const Screen3DigitalParchi: React.FC<{ caseId: string }> = ({ caseId }) =
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6">
+      <EmergencyBanner record={patient} compact />
       <div className="no-print bg-emerald-900 text-white rounded-xl p-5 mb-6 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">

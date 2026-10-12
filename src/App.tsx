@@ -7,6 +7,7 @@ import { SplashScreen } from './components/auth/SplashScreen';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { RegisterScreen } from './components/auth/RegisterScreen';
 import { PatientHome } from './components/patient/PatientHome';
+import { DocumentExplainer } from './components/patient/DocumentExplainer';
 import { Screen1Registration } from './components/Screen1Registration';
 import { Screen2AIAnalysis } from './components/Screen2AIAnalysis';
 import { Screen3DigitalParchi } from './components/Screen3DigitalParchi';
@@ -52,6 +53,8 @@ const AppInner: React.FC = () => {
 
   if (path === '/patient') {
     content = <PatientHome />;
+  } else if (path === '/patient/documents') {
+    content = <DocumentExplainer />;
   } else if (path === '/patient/new') {
     content = <Screen1Registration mode="create" />;
   } else if ((m = matchPath('/patient/cases/:id/edit', path))) {
@@ -89,7 +92,7 @@ const AppInner: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex flex-wrap items-center justify-center gap-2">
             <span className="font-bold text-slate-800">MediNexus AI</span>
-            <span>— OPD digital registration &amp; rule-based triage (MVP)</span>
+            <span>— AI-assisted OPD registration (Google Gemini) with rule-based emergency &amp; priority checks</span>
             <span className="text-slate-300">|</span>
             <span className="text-slate-400">Not a diagnosis. All cases are reviewed by a licensed doctor.</span>
           </div>

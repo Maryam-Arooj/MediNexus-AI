@@ -38,16 +38,14 @@ export interface GenerateJsonOptions {
   task: string;
 }
 
-const API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
-
 class RetryableError extends Error {}
 
-async function callModel(model: string, apiKey: string, timeoutMs: number, opts: GenerateJsonOptions): Promise<unknown> {
+async function callModel(model: string, apiKey: string, timeoutMs: number, apiBase: string, opts: GenerateJsonOptions): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/${encodeURIComponent(model)}:generateContent`, {
+    res = await fetch(`${apiBase}/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       signal: controller.signal,
@@ -111,7 +109,7 @@ export async function generateJson(opts: GenerateJsonOptions): Promise<unknown> 
   const attempts = [cfg.model, cfg.model, ...(cfg.fallbackModel ? [cfg.fallbackModel] : [])];
   for (const model of attempts) {
     try {
-      return await callModel(model, cfg.apiKey, cfg.timeoutMs, opts);
+      return await callModel(model, cfg.apiKey, cfg.timeoutMs, cfg.apiBase, opts);
     } catch (err) {
       if (err instanceof RetryableError) continue;
       throw err;

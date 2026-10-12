@@ -37,6 +37,20 @@ notepad .env
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:4173` |
 | `DEMO_DOCTOR_EMAIL` / `DEMO_DOCTOR_PASSWORD` / `DEMO_DOCTOR_NAME` | Your **own** demo doctor login (see step 6). The password needs 12+ characters with letters and numbers. |
 
+| `GEMINI_API_KEY` | **AI features.** Free key from https://aistudio.google.com/apikey (sign in with Google → *Create API key*). Paste it here yourself; never share it in chat or commit it. Leave empty to run without AI. |
+| `GEMINI_MODEL` | Default `gemini-2.5-flash`. If Google renames models and you get an AI error, put the current *Flash* model name shown in AI Studio here. |
+| `GEMINI_FALLBACK_MODEL` | Default `gemini-2.5-flash-lite` (used automatically when the main model is busy) |
+
+If your `backend\.env` was created before the AI features, add these lines at the end:
+
+```
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
+```
+
+Check the AI is on: start the backend and open http://localhost:3001/api/triage/options. It should show `"aiEnabled":true`.
+
 `backend\.env` is git-ignored. Never commit it.
 
 ## 4. Back up your database, then apply migrations
@@ -165,13 +179,17 @@ npm run build
 
 ### End-to-end (browser) tests
 
-These create real accounts and cases, so run the backend against the **test** database:
+These create real accounts and cases, so run the backend against the **test** database. They use an **offline fake Gemini server** (`e2e/fake-gemini.mjs`), so no API key or quota is needed:
 
 ```powershell
+# Terminal 0 — fake AI for tests only
+cd "D:\MediNexus AI"
+node e2e/fake-gemini.mjs
+
 # Terminal 1
 cd "D:\MediNexus AI\backend"
 $env:ENV_FILE=".env.test"; npm run doctor:provision    # needs DEMO_DOCTOR_* in .env.test
-$env:ENV_FILE=".env.test"; npm run dev
+$env:ENV_FILE=".env.test"; $env:GEMINI_API_KEY="fake"; $env:GEMINI_API_BASE="http://localhost:8787/v1beta/models"; $env:GEMINI_FALLBACK_MODEL=""; npm run dev
 
 # Terminal 2
 cd "D:\MediNexus AI"
@@ -197,6 +215,9 @@ Rebuild the backend (`npm run build`) after pulling changes; `backend\dist` hold
 
 | Problem | Fix |
 |---|---|
+| "AI assistant is not configured" | `GEMINI_API_KEY` is empty in `backend\.env`. Add it and restart the backend. |
+| "The AI service rejected the request…" | Wrong key or model name. Check `GEMINI_API_KEY` / `GEMINI_MODEL`, restart the backend. |
+| "AI assistant unavailable" / "Too many AI requests" | Internet down, Google busy or free quota reached. Wait a minute; the rest of the app keeps working. |
 | `Configuration error: JWT_SECRET …` | Set a new random `JWT_SECRET` (32+ characters) in `backend\.env` |
 | `Cannot reach the MediNexus AI server` | Start the backend (`npm run dev` in `backend`) |
 | `Failed to connect to PostgreSQL` | Start the PostgreSQL service; check `DATABASE_URL` |
