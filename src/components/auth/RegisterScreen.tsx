@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, User, Phone, Mail, CreditCard, ArrowRight, Loader2, Stethoscope } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, Phone, Mail, CreditCard, ArrowRight, Loader2, Info } from 'lucide-react';
 import { authRegister } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { UserRole } from '../../types/auth';
+import { formatCnicInput, validateRegistration } from '../../lib/validation';
 
 interface RegisterScreenProps {
   onNavigateToLogin: () => void;
@@ -10,7 +10,6 @@ interface RegisterScreenProps {
 
 export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogin }) => {
   const { login } = useAuth();
-  const [role, setRole] = useState<UserRole>('patient');
   const [fullName, setFullName] = useState('');
   const [cnic, setCnic] = useState('');
   const [phone, setPhone] = useState('');
@@ -25,20 +24,14 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !cnic || !password || !confirmPassword) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (isLoading) return; // no double submission
+    const problem = validateRegistration({ fullName, cnic, phone, email, password, confirmPassword });
+    if (problem) {
+      setError(problem);
       return;
     }
     if (!agreed) {
-      setError('Please agree to the Terms & Conditions.');
+      setError('Please confirm that these details are your own.');
       return;
     }
 
@@ -46,7 +39,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
     setError(null);
     try {
       const { token, user } = await authRegister({
-        fullName, cnic, phone, email, password, confirmPassword, role,
+        fullName, cnic, phone, email, password, confirmPassword,
       });
       login(token, user);
     } catch (err) {
@@ -86,32 +79,12 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
           <h2 className="text-2xl font-bold text-slate-800 mb-1">Create Your Account</h2>
           <p className="text-slate-500 text-sm mb-5">Join MediNexus AI for a better healthcare experience</p>
 
-          {/* Role tabs */}
-          <div className="flex gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
-            <button
-              id="role-patient"
-              type="button"
-              onClick={() => setRole('patient')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                role === 'patient'
-                  ? 'bg-teal-600 text-white shadow-md'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <User className="w-4 h-4" /> Patient
-            </button>
-            <button
-              id="role-doctor"
-              type="button"
-              onClick={() => setRole('doctor')}
-              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                role === 'doctor'
-                  ? 'bg-teal-600 text-white shadow-md'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Stethoscope className="w-4 h-4" /> Doctor
-            </button>
+          {/* Public sign-up always creates a PATIENT account — doctors are provisioned by the administrator. */}
+          <div className="flex items-start gap-2 mb-5 p-3 rounded-xl bg-teal-50 border border-teal-100 text-xs text-teal-800">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span>
+              This form creates a <strong>patient</strong> account. Doctor accounts are created by the hospital administrator and cannot be registered here.
+            </span>
           </div>
 
           {error && (
@@ -128,7 +101,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 id="reg-fullname"
                 type="text"
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => { setFullName(e.target.value); setError(null); }}
                 placeholder="Full Name *"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
               />
@@ -141,8 +114,9 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 id="reg-cnic"
                 type="text"
                 value={cnic}
-                onChange={(e) => setCnic(e.target.value)}
-                placeholder="CNIC / National ID *"
+                onChange={(e) => setCnic(formatCnicInput(e.target.value))}
+                inputMode="numeric"
+                placeholder="CNIC * (e.g. 35202-1234567-1)"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
               />
             </div>
@@ -155,7 +129,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                placeholder="Phone Number"
+                placeholder="Mobile (optional, e.g. 03001234567)"
                 className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
               />
             </div>
@@ -181,7 +155,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password *"
+                placeholder="Password * (8+ chars, letters & numbers)"
                 className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
               />
               <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600" tabIndex={-1}>
@@ -215,8 +189,7 @@ export const RegisterScreen: React.FC<RegisterScreenProps> = ({ onNavigateToLogi
                 className="w-4 h-4 accent-teal-600 rounded"
               />
               <span className="text-sm text-slate-600">
-                I agree to the{' '}
-                <span className="text-teal-600 font-semibold">Terms &amp; Conditions</span>
+                I confirm these details are my own and correct
               </span>
             </label>
 

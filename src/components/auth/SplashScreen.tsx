@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 interface SplashScreenProps {
   onDone: () => void;
@@ -6,14 +6,20 @@ interface SplashScreenProps {
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onDone }) => {
   const [visible, setVisible] = useState(true);
+  const doneRef = useRef(onDone);
+  doneRef.current = onDone;
 
   useEffect(() => {
+    let fade: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
       setVisible(false);
-      setTimeout(onDone, 400); // allow fade-out to complete
+      fade = setTimeout(() => doneRef.current(), 400); // allow fade-out to complete
     }, 3000);
-    return () => clearTimeout(timer);
-  }, [onDone]);
+    return () => {
+      clearTimeout(timer);
+      if (fade) clearTimeout(fade);
+    };
+  }, []);
 
   return (
     <div
@@ -88,7 +94,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onDone }) => {
 
         {/* Tagline */}
         <div className="flex flex-col items-center gap-1 mt-2">
-          <p className="text-teal-200 text-sm font-medium">Smarter Diagnosis • Faster Care</p>
+          <p className="text-teal-200 text-sm font-medium">Digital Registration • Faster OPD Routing</p>
           <p className="text-teal-200 text-sm font-medium">Healthier Tomorrow</p>
         </div>
 

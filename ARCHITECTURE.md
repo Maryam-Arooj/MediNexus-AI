@@ -1,149 +1,61 @@
 # MediNexus AI — Architecture
 
-## Overview
-
-MediNexus AI is a full-stack digital hospital pre-check and triage application: React frontend → Express/TypeScript backend → Prisma ORM → local PostgreSQL.
-
 ```
-┌─────────────────┐     /api/* (Vite proxy)     ┌──────────────────┐
-│  React Frontend │ ──────────────────────────► │ Express Backend  │
-│  (port 5173)    │ ◄────────────────────────── │  (port 3001)     │
-└─────────────────┘   JWT / JSON Responses      └────────┬─────────┘
-        │                                                │
-   AuthContext                                  Prisma ORM (v5)
-  (localStorage)                                         │
-                                                         ▼
-                                                ┌──────────────────┐
-                                                │   PostgreSQL     │
-                                                │  (localhost:5432)│
-                                                └──────────────────┘
+React (Vite, :5173) ──/api proxy──► Express (:3001) ──Prisma──► PostgreSQL (:5432)
+   router + route guard (UX)          requireAuth → requireRole → ownership check → service → transaction
 ```
 
----
+## Frontend (`src/`)
 
-## Frontend Architecture (`src/`)
+| Path | Role |
+|---|---|
+| `App.tsx` | URL routing; renders screens for the **server-verified** role |
+| `lib/router.ts` | Tiny history-API router (`navigate`, `usePath`, `matchPath`) |
+| `lib/routeAccess.ts` | `resolveAccess(path, role)`: redirects logged-out users to `/login`, patients away from `/doctor`, doctors away from `/patient` |
+| `lib/validation.ts` | Client-side checks that match the server's (CNIC, phone, email, password, case form) |
+| `context/AuthContext.tsx` | Loads the user from `GET /auth/me` on start; logout calls the server; any `401` logs out locally |
+| `api/client.ts` | Fetch wrapper (Bearer token, safe JSON parsing, typed errors) |
+| `hooks/useTriageOptions.ts` | Symptom/duration lists from `GET /api/triage/options`, the same source the rule engine uses |
+| `hooks/useCase.ts` | Loads a case fresh from the server (the parchi is always current) |
+| `components/auth/*` | Splash, Login, Register (patient-only) |
+| `components/patient/PatientHome.tsx` | My Visits |
+| `components/Screen1Registration.tsx` | New assessment / edit symptoms (one request id per form, disabled while saving) |
+| `components/Screen2AIAnalysis.tsx` | Triage result with reason, warnings, department, next steps, review status |
+| `components/Screen3DigitalParchi.tsx` | Printable slip (`window.print()`, print CSS hides navigation) |
+| `components/Screen4DoctorDashboard.tsx` | Doctor queue, filters, search, review / approve / reopen |
 
-### Application Shell & State
-* **`App.tsx`**: Root component orchestrating screen routing between Authentication (`splash`, `login`, `register`, `roleSelect`) and Clinical screens (`1`, `2`, `3`, `4`).
-* **`context/AuthContext.tsx`**: Manages user authentication state (`user`, `token`, `isAuthenticated`, `isLoading`), validates stored JWTs on load via `GET /api/auth/me`, and provides `login()` and `logout()`.
-* **`api/client.ts`**: Unified API client communicating with backend endpoints, handling JWT token attachment (`Authorization: Bearer <token>`) and standard error mapping.
+Routes: `/login`, `/register`, `/patient`, `/patient/new`, `/patient/cases/:id`, `/patient/cases/:id/edit`, `/patient/cases/:id/parchi`, `/doctor`.
 
-### Types
-* **`types/auth.ts`**: User, authentication state, login, and registration input interfaces.
-* **`types/medical.ts`**: Patient records, triage analysis, clinical review, and department types.
-* **`data/mockData.ts`**: UI symptom taxonomies, duration options, and constants for General Medicine and Dermatology.
+## Backend (`backend/src/`)
 
-### Components
-* **Authentication Screens (`components/auth/`)**:
-  * `SplashScreen.tsx`: 3-second animated hospital brand splash screen with auto-fade transition.
-  * `LoginScreen.tsx`: CNIC / Email login with show/hide password toggle.
-  * `RegisterScreen.tsx`: Account creation with Full Name, CNIC, Phone, Email, Password, Terms, and Patient/Doctor role selector.
-  * `RoleSelectScreen.tsx`: Post-login gateway routing users to either Patient OPD Intake or Doctor Dashboard.
-* **Clinical Screens (`components/`)**:
-  * `Screen1Registration.tsx`: Patient demographics (name, age, gender) and department symptom selector.
-  * `Screen2AIAnalysis.tsx`: Triage result presentation with risk level meter, clinical red flags, differential conditions, and SBAR handover summary.
-  * `Screen3DigitalParchi.tsx`: Printable electronic outpatient slip (*parchi*) with token number and verification QR mock.
-  * `Screen4DoctorDashboard.tsx`: Physician triage queue, live counters, search/filter, and doctor review modal for editing clinical notes and approving triage.
-  * `Navbar.tsx`: Persistent navigation stepper, demo presets, and logout button.
+| Path | Role |
+|---|---|
+| `config/env.ts` | Validates the environment. No JWT fallback; refuses short or leaked secrets. |
+| `app.ts` / `server.ts` | `createApp(config)` (used by the tests too) and the process entry point |
+| `middleware/auth.ts` | `requireAuth` verifies the JWT (HS256), **reloads the user from the DB** and checks `tokenVersion`. `requireRole(...)` returns 403. |
+| `middleware/errorHandler.ts` | Maps zod / HTTP / Prisma errors to safe messages. Logs only method, path, status and error code. |
+| `middleware/rateLimit.ts` | Login/register rate limit |
+| `validation/schemas.ts` | zod schemas (register, login, case, review) |
+| `services/auth.service.ts` | Register (always PATIENT), login, logout (revocation) |
+| `services/patients.service.ts` | Create case (single transaction + idempotency), list own, get with ownership, edit own pending case |
+| `services/doctor.service.ts` | Queue, review (changed fields only), approve (conditional update), reopen |
+| `services/counters.ts` | Atomic token / patient-id allocation |
+| `services/patientRecord.ts` | API shape; strips doctor-only fields for patients |
+| `services/doctorProvisioning.ts` + `scripts/provisionDoctor.ts` | The only way to create a DOCTOR |
+| `scripts/inspectDatabase.ts` | Read-only DB integrity report |
+| `triage/triageConfig.ts`, `triage/evaluateMedicalTriage.ts` | The single rule engine and its option lists |
 
----
+## Authorization model
 
-## Backend Architecture (`backend/src/`)
+1. **Authentication:** a signed JWT (`sub`, `ver`) with **no role inside it**.
+2. **Per request:** the user is loaded from PostgreSQL, so the role always comes from the database. A demoted doctor loses access immediately, and logout (`tokenVersion` increase) invalidates every earlier token.
+3. **Role:** `/api/doctor/*` requires DOCTOR. Patient case routes require PATIENT, except `GET /patients/:id`, which doctors may also use.
+4. **Ownership:** patients only query rows with `userId = me`. Another patient's case returns 404, so case ids can't be probed.
+5. **Field-level:** clinical notes, possible conditions, the handover summary and the rule default action are removed from patient responses.
 
-* **`server.ts`**: Application bootstrapper; tests PostgreSQL connectivity via Prisma before starting Express server on port 3001.
-* **`app.ts`**: Express application setup, CORS policy, JSON body parsing, route mounting, and global error handling.
-* **`routes/auth.ts`**: Authentication route definitions (`/register`, `/login`, `/me`, `/logout`).
-* **`controllers/auth.controller.ts`**: Validates input, hashes passwords with `bcryptjs` (cost factor 12), creates User records, and signs stateless JWT tokens.
-* **`middleware/authMiddleware.ts`**: `requireAuth` middleware verifying Bearer JWT tokens and attaching user context to requests.
-* **`routes/patients.ts`**: Patient and triage REST routes (`POST /`, `GET /`, `GET /:id`, `PUT /:id/review`, `POST /:id/approve`).
-* **`controllers/patients.controller.ts`**: Request validation and response shaping for patient endpoints.
-* **`services/patients.service.ts`**: Business logic, public Patient ID (`SC-2026-XXXX`) generation, OPD token serial (`GM-01`, `DERM-01`) generation, and database transactions.
-* **`triage/evaluateMedicalTriage.ts`**: Deterministic, rule-based medical triage engine.
-* **`lib/prisma.ts`**: Shared Prisma Client singleton.
-* **`middleware/errorHandler.ts`**: Centralized HTTP error handler.
+## Data integrity
 
----
-
-## Database Architecture (`backend/prisma/`)
-
-* **`schema.prisma`**: Defines database models:
-  * `User`: System accounts with roles (`patient`, `doctor`) and bcrypt password hashes.
-  * `Patient`: Outpatient demographic and consultation intake records.
-  * `TriageResult`: 1-to-1 relation with Patient storing risk classifications, red flags, and handover summaries.
-  * `DoctorReview`: 1-to-1 relation with Patient storing clinical notes, prescription overrides, and approvals.
-* **`migrations/`**:
-  * `20260905101641_init`: Base schema for patients, triage, and doctor reviews.
-  * `20260906041835_add_auth`: Added `users` table and linked `userId` on `patients`.
-
----
-
-## Triage Engine
-
-Located at `backend/src/triage/evaluateMedicalTriage.ts`. Operates deterministically without external API dependencies:
-
-1. **Department Routing**: Evaluates symptom selections across General Medicine and Dermatology to assign the appropriate OPD clinic and room.
-2. **Risk Classification**: Evaluates symptom combinations, age thresholds, and duration to assign `Low`, `Medium`, or `High` risk.
-3. **Clinical Warnings (Red Flags)**: Flags potential acute conditions (e.g. prolonged febrile respiratory illness, spreading cutaneous bacterial infections).
-4. **Differential Considerations**: Selects candidate conditions for the examining physician.
-5. **Physician Handover Summary**: Generates a standardized SBAR (Situation, Background, Assessment, Recommendation) narrative to reduce physician documentation time.
-6. **Confidence Rating**: Deterministic confidence score (94%).
-
----
-
-## Complete User & Screen Flow
-
-```
-                     ┌──────────────────────────┐
-                     │   Splash Screen (3s)     │
-                     └─────────────┬────────────┘
-                                   │
-                     ┌─────────────▼────────────┐
-                     │   Login / Register       │
-                     └─────────────┬────────────┘
-                                   │ (JWT Authenticated)
-                     ┌─────────────▼────────────┐
-                     │ Select Identity / Role   │
-                     └─────────────┬────────────┘
-                                   │
-         ┌─────────────────────────┴─────────────────────────┐
-         ▼                                                   ▼
-┌──────────────────┐                               ┌──────────────────┐
-│   PATIENT ROLE   │                               │   DOCTOR ROLE    │
-└────────┬─────────┘                               └────────┬─────────┘
-         │                                                   │
-         ▼                                                   ▼
-┌──────────────────────────────┐                   ┌──────────────────────────────┐
-│ Screen 1: OPD Registration   │                   │ Screen 4: Doctor Dashboard   │
-│ (Demographics & Symptoms)    │                   │ - Live Queue Metrics         │
-└────────┬─────────────────────┘                   │ - Department Search & Filter │
-         │ (POST /api/patients)                    │ - Patient Queue Table        │
-         ▼                                         └────────┬─────────────────────┘
-┌──────────────────────────────┐                            │
-│ Screen 2: AI Medical Analysis│                            │ (Open Report)
-│ (Risk, Red Flags, SBAR)      │                            ▼
-└────────┬─────────────────────┘                   ┌──────────────────────────────┐
-         │                                         │ Doctor Clinical Review Modal │
-         ▼                                         │ - Inspect AI Triage & Flags  │
-┌──────────────────────────────┐                   │ - Edit Clinical Notes & Rx   │
-│ Screen 3: Digital Parchi Slip│                   │ - Approve Triage Sign-off    │
-│ (Printable Slip with Token)  │                   └──────────────────────────────┘
-└──────────────────────────────┘
-```
-
----
-
-## Technology Stack
-
-| Layer | Technology | Purpose |
-|---|---|---|
-| Frontend UI | React 18, TypeScript | Component-driven user interface |
-| Build Tool | Vite 6 | Fast compilation, HMR, and bundling |
-| Styling | Tailwind CSS v3 | Utility-first responsive design |
-| Icons | Lucide React | Clean medical and UI iconography |
-| State & Auth | React Context + LocalStorage | Session persistence and JWT storage |
-| Backend API | Node.js, Express 4, TypeScript | RESTful API server |
-| Password Security | bcryptjs | Salted password hashing (work factor 12) |
-| Token Security | jsonwebtoken (JWT) | Stateless token-based authentication |
-| ORM | Prisma 5 | Type-safe database queries and migrations |
-| Database | PostgreSQL (local) | Persistent relational data storage |
-| Triage Engine | Pure TypeScript Rule Engine | Deterministic medical triage logic |
+- Counter allocation, patient, triage and review are written in **one interactive transaction**, so a failure leaves nothing behind (covered by a test that forces a DB error).
+- Tokens come from monotonic counters (row-locked), so they're unique under concurrency and after deletions.
+- `clientRequestId` makes double clicks and retries return the same case.
+- Approve uses a conditional `updateMany(status != Approved)`, so a case can't be approved twice. Edits by the patient re-check "Pending Review" inside the transaction.

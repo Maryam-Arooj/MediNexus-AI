@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, User, HeartPulse, ArrowRight, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, User, HeartPulse, ArrowRight, Loader2, Mail, Stethoscope } from 'lucide-react';
 import { authLogin } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { LoginMode, roleMismatchMessage, validateLoginInput } from '../../lib/loginMode';
 
 interface LoginScreenProps {
   onNavigateToRegister: () => void;
@@ -9,6 +10,7 @@ interface LoginScreenProps {
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }) => {
   const { login } = useAuth();
+  const [mode, setMode] = useState<LoginMode>('PATIENT');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -17,16 +19,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier.trim() || !password) {
-      setError('Please enter your CNIC/Email and password.');
+    if (isLoading) return;
+    const problem = validateLoginInput(mode, identifier, password);
+    if (problem) {
+      setError(problem);
       return;
     }
     setIsLoading(true);
     setError(null);
     try {
       const { token, user } = await authLogin({ identifier: identifier.trim(), password });
+      // The backend decides the role. If it doesn't match the option picked here, the token is
+      // discarded (never stored) and the user is not signed in through the wrong option.
+      const mismatch = roleMismatchMessage(mode, user.role);
+      if (mismatch) {
+        setError(mismatch);
+        return;
+      }
       login(token, user);
-      // AuthContext update triggers App.tsx routing to role-select
+      // AuthContext update → the route guard sends the user to the dashboard for their server-verified role.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed. Please try again.');
     } finally {
@@ -64,7 +75,35 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
       <div className="flex-1 flex items-start justify-center px-4 -mt-6">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 pt-8">
           <h2 className="text-2xl font-bold text-slate-800 mb-1">Welcome Back</h2>
-          <p className="text-slate-500 text-sm mb-6">Sign in to access your healthcare dashboard</p>
+          <p className="text-slate-500 text-sm mb-5">Sign in to access your healthcare dashboard</p>
+
+          {/* Patient / Doctor selector — changes the form only; access is decided by the server-verified role. */}
+          <div role="tablist" aria-label="Sign in as" className="flex gap-2 mb-5 p-1 bg-slate-100 rounded-xl">
+            {([
+              { value: 'PATIENT', label: 'Patient', Icon: User },
+              { value: 'DOCTOR', label: 'Doctor', Icon: Stethoscope },
+            ] as const).map(({ value, label, Icon }) => (
+              <button
+                key={value}
+                id={`login-mode-${value.toLowerCase()}`}
+                type="button"
+                role="tab"
+                aria-selected={mode === value}
+                onClick={() => {
+                  if (mode !== value) {
+                    setMode(value);
+                    setIdentifier('');
+                    setError(null);
+                  }
+                }}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                  mode === value ? 'bg-teal-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" /> {label}
+              </button>
+            ))}
+          </div>
 
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
@@ -72,20 +111,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {/* CNIC / Email */}
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                CNIC / National ID or Email
+                {mode === 'DOCTOR' ? 'Doctor Email' : 'CNIC / National ID or Email'}
               </label>
               <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                {mode === 'DOCTOR' ? (
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                ) : (
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                )}
                 <input
                   id="login-identifier"
-                  type="text"
+                  type={mode === 'DOCTOR' ? 'email' : 'text'}
                   value={identifier}
                   onChange={(e) => { setIdentifier(e.target.value); setError(null); }}
-                  placeholder="CNIC / National ID"
+                  placeholder={mode === 'DOCTOR' ? 'doctor@hospital.pk' : '35202-1234567-1 or you@email.com'}
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
                   autoComplete="username"
                 />
@@ -135,30 +178,38 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToRegister }
             </button>
           </form>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-slate-200" />
-            <span className="text-xs text-slate-400 font-medium">OR</span>
-            <div className="flex-1 h-px bg-slate-200" />
-          </div>
+          {mode === 'PATIENT' ? (
+            <>
+              {/* Divider */}
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-slate-200" />
+                <span className="text-xs text-slate-400 font-medium">OR</span>
+                <div className="flex-1 h-px bg-slate-200" />
+              </div>
 
-          {/* Register link */}
-          <p className="text-center text-sm text-slate-500">
-            Don&apos;t have an account?{' '}
-            <button
-              id="go-to-register"
-              onClick={onNavigateToRegister}
-              className="font-bold text-teal-600 hover:text-teal-700 transition"
-            >
-              Register
-            </button>
-          </p>
+              {/* Register link (patients only) */}
+              <p className="text-center text-sm text-slate-500">
+                Don&apos;t have an account?{' '}
+                <button
+                  id="go-to-register"
+                  onClick={onNavigateToRegister}
+                  className="font-bold text-teal-600 hover:text-teal-700 transition"
+                >
+                  Register
+                </button>
+              </p>
+            </>
+          ) : (
+            <p id="doctor-login-note" className="mt-5 text-center text-xs text-slate-500">
+              Doctor accounts are created by the hospital administrator. There is no public doctor registration.
+            </p>
+          )}
         </div>
       </div>
 
       {/* Footer */}
       <p className="text-center text-xs text-slate-400 py-6">
-        🔒 Your data is safe and secure — MediNexus AI uses bank-level encryption
+        🔒 Passwords are stored as salted bcrypt hashes. Doctor accounts are created by the hospital administrator.
       </p>
     </div>
   );

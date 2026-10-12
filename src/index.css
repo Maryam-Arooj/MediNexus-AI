@@ -9,7 +9,7 @@
   }
 }
 
-/* Custom Print styles for Screen 3 Digital Parchi */
+/* Print styles for the Digital Parchi (Screen 3) */
 @media print {
   body {
     background: white !important;
@@ -18,14 +18,15 @@
   .no-print {
     display: none !important;
   }
-  .print-only {
-    display: block !important;
-  }
   .print-parchi-card {
     box-shadow: none !important;
     border: 2px solid #0f172a !important;
     page-break-inside: avoid;
     width: 100% !important;
     max-width: 100% !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }

@@ -1,34 +1,30 @@
 /**
- * Prisma Seed — SmartCare
- *
- * ⚠️  Seed data has been intentionally removed.
- *
- * The SmartCare database must only contain real patient records created through
- * the actual registration flow. Running this seed will NOT insert any demo or
- * fake patients.
- *
- * If you need to test the registration flow, use the SmartCare UI at
- * http://localhost:5173 to register a real patient.
+ * Prisma seed — MediNexus AI.
+ * Inserts NO patients (the database only holds real records created through the app).
+ * It only provisions the demo doctor from DEMO_DOCTOR_* (same rules as `npm run doctor:provision`),
+ * and does nothing when those variables are not set.
  */
+import * as dotenv from 'dotenv';
+dotenv.config({ path: process.env.ENV_FILE || '.env' });
 
 import { PrismaClient } from '@prisma/client';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
-
-const prisma = new PrismaClient();
+import { provisionDoctor, ProvisionError } from '../src/services/doctorProvisioning';
 
 async function main() {
-  console.log('🌱 SmartCare seed: no demo data to insert.');
-  console.log('   Use the SmartCare UI to register real patients.');
-  console.log('✅ Seed complete (nothing changed).');
+  if (!process.env.DEMO_DOCTOR_EMAIL) {
+    console.log('ℹ️  DEMO_DOCTOR_EMAIL not set — no doctor provisioned. Nothing changed.');
+    return;
+  }
+  const prisma = new PrismaClient();
+  try {
+    const r = await provisionDoctor(prisma, { env: process.env });
+    console.log(`✅ Demo doctor: ${r.status} (${r.email})`);
+  } catch (e) {
+    console.error(`❌ ${e instanceof ProvisionError ? e.message : (e as Error).name}`);
+    process.exitCode = 1;
+  } finally {
+    await prisma.$disconnect();
+  }
 }
 
-main()
-  .catch((e) => {
-    console.error('❌ Seed failed:', e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main();

@@ -1,33 +1,38 @@
-import * as dotenv from 'dotenv';
-dotenv.config();
-
-import app from './app';
+import { ConfigError, getConfig } from './config/env';
 import prisma from './lib/prisma';
 
-const PORT = parseInt(process.env.PORT || '3001', 10);
-
 async function start() {
+  let config;
   try {
-    // Verify database connection on startup
+    config = getConfig();
+  } catch (err) {
+    if (err instanceof ConfigError) {
+      console.error(`❌ Configuration error: ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+
+  const { createApp } = await import('./app');
+  try {
     await prisma.$connect();
     console.log('✅ PostgreSQL connected');
-
-    app.listen(PORT, () => {
-      console.log(`🚀 MediNexus AI backend running at http://localhost:${PORT}`);
-      console.log(`   Health: http://localhost:${PORT}/api/health`);
-      console.log(`   Patients: http://localhost:${PORT}/api/patients`);
-    });
   } catch (err) {
-    console.error('❌ Failed to connect to PostgreSQL:', err);
+    console.error('❌ Failed to connect to PostgreSQL. Check DATABASE_URL in backend/.env and that PostgreSQL is running.', (err as Error).name);
     process.exit(1);
   }
+
+  createApp(config).listen(config.port, () => {
+    console.log(`🚀 MediNexus AI backend running at http://localhost:${config.port}`);
+    console.log(`   Health: http://localhost:${config.port}/api/health`);
+  });
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
+async function shutdown() {
   await prisma.$disconnect();
-  console.log('🔌 PostgreSQL disconnected — server shut down');
   process.exit(0);
-});
+}
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
 
 start();

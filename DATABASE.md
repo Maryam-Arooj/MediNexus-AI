@@ -1,129 +1,96 @@
 # MediNexus AI — Database
 
-## Overview
+Local **PostgreSQL** via **Prisma 5**. The schema is in `backend/prisma/schema.prisma` and the migrations are in `backend/prisma/migrations/`.
 
-MediNexus AI uses **local PostgreSQL** with **Prisma ORM**. Schema is defined in `backend/prisma/schema.prisma`. Migrations live in `backend/prisma/migrations/`.
-
-**Connection:** Set `DATABASE_URL` in `backend/.env`:
-```
-postgresql://USER:PASSWORD@localhost:5432/smartcare
-```
-
----
-
-## Models
+## Tables
 
 ### users
 
-Stores registered user accounts (Patients and Doctors) with salted bcrypt password hashes.
+| Column | Notes |
+|---|---|
+| id | cuid PK |
+| fullName | |
+| cnic | unique, `#####-#######-#` (doctors without a CNIC get a reserved `00000-…-0` placeholder) |
+| email | unique, optional; login lookup ignores upper/lower case |
+| phone | optional, `03XXXXXXXXX` |
+| passwordHash | bcrypt, cost 12 |
+| role | enum `Role` = `PATIENT` \| `DOCTOR` (default `PATIENT`). `DOCTOR` is only set by `npm run doctor:provision`. |
+| tokenVersion | increased on logout; older tokens are rejected |
+| createdAt, updatedAt | |
 
-| Column | Type | Notes |
-|---|---|---|
-| id | TEXT (PK) | CUID internal identifier |
-| fullName | TEXT | User's full display name |
-| cnic | TEXT (unique) | National ID / CNIC (used for login) |
-| email | TEXT (unique, nullable) | Email address (used for login) |
-| phone | TEXT (nullable) | Contact phone number |
-| passwordHash | TEXT | Salted bcrypt hash (work factor 12) |
-| role | TEXT | Role: `patient` or `doctor` (default: `patient`) |
-| createdAt | TIMESTAMP | Timestamp of account registration |
-| updatedAt | TIMESTAMP | Timestamp of last account modification |
+### patients (one row per OPD case)
 
-### patients
+| Column | Notes |
+|---|---|
+| id | cuid PK |
+| patientId | unique public id `SC-<year>-<NNNN>` (sequential per year) |
+| tokenNumber | unique `GM-01`, `DERM-07`… from `token_counters`, never reused |
+| name, age, gender, symptoms (JSON string[]), duration | patient input |
+| department, assignedRoom | from the triage rules |
+| userId | FK → users (owner). `NULL` only for legacy rows created before accounts were linked. |
+| clientRequestId | idempotency key; unique together with userId |
+| createdAt, updatedAt | |
 
-Stores digitally registered outpatient OPD records.
+Indexes: `userId`, `createdAt`, unique `(userId, clientRequestId)`.
 
-| Column | Type | Notes |
-|---|---|---|
-| id | TEXT (PK) | CUID internal ID |
-| patientId | TEXT (unique) | Public ID, e.g. `SC-2026-1715` |
-| name | TEXT | Default: "Anonymous Patient" |
-| age | INTEGER | Patient age (1–120) |
-| gender | TEXT | Male / Female / Other |
-| symptoms | JSONB | String array of selected symptoms |
-| duration | TEXT | Reported duration (e.g. "3 - 5 days") |
-| tokenNumber | TEXT (unique) | OPD Serial Token, e.g. `GM-01`, `DERM-03` |
-| department | TEXT | General Medicine / Dermatology |
-| assignedRoom | TEXT | Assigned OPD consultation room string |
-| userId | TEXT (FK → users.id, nullable) | Optional reference to the registering User account |
-| createdAt | TIMESTAMP | Timestamp of OPD pre-check registration |
+### triage_results (1-to-1 with patients, cascade delete)
 
-### triage_results
+`riskLevel`, `riskReason`, `redFlags` (JSON), `possibleConditions` (JSON, shown to doctors only), `recommendedAction`, `doctorHandoverSummary`, `engineVersion` (`rules-v1` for old rows, `rules-v2` now), and `confidenceScore`. That last one is a legacy nullable column: old rows hold a hard-coded 94, and it is no longer written or shown.
 
-Stores the deterministic AI triage assessment for each patient.
+### doctor_reviews (1-to-1 with patients, cascade delete)
 
-| Column | Type | Notes |
-|---|---|---|
-| id | TEXT (PK) | CUID internal identifier |
-| patientId | TEXT (FK → patients.id, unique) | One-to-one with Patient |
-| riskLevel | TEXT | Low / Medium / High |
-| redFlags | JSONB | String array of clinical warning flags |
-| possibleConditions | JSONB | String array of differential diagnosis considerations |
-| recommendedAction | TEXT | Actionable clinical recommendation |
-| doctorHandoverSummary | TEXT | SBAR-style clinical handover summary |
-| confidenceScore | INTEGER | Confidence rating percentage (e.g. 94) |
-| createdAt | TIMESTAMP | Timestamp of triage generation |
+| Column | Notes |
+|---|---|
+| status | `Pending Review` → `Under Review` → `Approved` (reopen goes back to `Under Review`) |
+| clinicalNotes | doctor-only |
+| recommendedActionOverride | `NULL` = use the rule engine's action |
+| reviewedById, reviewedAt | last doctor who changed the review |
+| approvedById, approvedBy, approvedAt | approving doctor (FK + name snapshot) |
 
-### doctor_reviews
+Index: `status`.
 
-Stores attending physician clinical notes, prescription overrides, and triage approvals.
+### token_counters
 
-| Column | Type | Notes |
-|---|---|---|
-| id | TEXT (PK) | CUID internal identifier |
-| patientId | TEXT (FK → patients.id, unique) | One-to-one with Patient |
-| status | TEXT | Pending Review / Under Review / Approved |
-| clinicalNotes | TEXT (nullable) | Attending doctor physical exam notes & prescription overrides |
-| recommendedActionOverride | TEXT (nullable) | Physician-adjusted clinical management plan |
-| approvedBy | TEXT (nullable) | Name/title of approving medical officer |
-| approvedAt | TIMESTAMP (nullable) | Timestamp of clinical sign-off |
-| updatedAt | TIMESTAMP | Auto-updated on modification |
+`key` PK (`GM`, `DERM`, `PID-2026`, …) and `value`. Allocation runs inside the case transaction:
 
----
+```sql
+INSERT INTO token_counters (key, value) VALUES ($1, 1)
+ON CONFLICT (key) DO UPDATE SET value = token_counters.value + 1 RETURNING value;
+```
+
+The row lock serialises concurrent registrations. Values only ever increase, so deleting a case can never cause its number to be issued again. **Tokens do not reset daily.** A daily reset would need a date-scoped unique key; that's a possible future change.
+
+### role_change_audit
+
+A record of every role change made by the migration or the provisioning script (`userId`, `oldRole`, `newRole`, `reason`, `changedAt`).
 
 ## Relations
 
 ```
-User    1──* Patient       (optional link via userId)
-Patient 1──1 TriageResult  (onDelete: Cascade)
-Patient 1──1 DoctorReview  (onDelete: Cascade)
+User 1──* Patient            (owner, optional for legacy rows)
+User 1──* DoctorReview        (reviewedBy, approver; ON DELETE SET NULL)
+Patient 1──1 TriageResult     (ON DELETE CASCADE)
+Patient 1──1 DoctorReview     (ON DELETE CASCADE)
 ```
-
----
 
 ## Migrations
 
-The database schema is tracked and version-controlled using Prisma Migrate:
+1. `20260905101641_init`: patients, triage_results, doctor_reviews.
+2. `20260906041835_add_auth`: users plus `patients.userId`.
+3. `20261012090000_security_and_integrity`: non-destructive repair.
+   - Adds the role enum and demotes unverified self-registered "doctor" accounts, with each change audited.
+   - Adds `tokenVersion`, the idempotency key and indexes.
+   - Adds the reviewer/approver columns.
+   - Makes `confidenceScore` nullable and adds `engineVersion` and `riskReason`.
+   - Back-fills missing review rows.
+   - Creates `token_counters`, starting at the highest existing token and patient id.
 
-1. `20260905101641_init`: Initial schema containing `patients`, `triage_results`, and `doctor_reviews` tables.
-2. `20260906041835_add_auth`: Added `users` table for authentication and nullable `userId` foreign key on `patients`.
+Apply with `npm run db:migrate` (= `prisma migrate deploy`). **Back up first.** See SETUP.md for the `pg_dump` and `pg_restore` commands.
 
-```bash
-cd backend
-npx prisma migrate status  # Verify all migrations are applied
-npx prisma migrate dev     # Apply migrations in development
-npx prisma migrate deploy  # Apply migrations in production
-```
+## Useful commands (from `backend/`)
 
----
-
-## Database Management & Seed
-
-The database strictly preserves real patient records created through the application registration flow.
-
-```bash
-cd backend
-npm run db:migrate         # Apply pending migrations
-npm run db:seed            # Run Prisma seed check
-```
-
----
-
-## Useful Prisma Commands
-
-```bash
-cd backend
-npx prisma studio          # Visual database browser GUI (port 5555)
-npx prisma generate        # Regenerate Prisma Client types
-npx prisma migrate status  # Check migration state
+```powershell
+npm run db:inspect      # read-only counts & integrity checks (no personal data)
+npm run db:status       # migration status
+npx prisma studio       # GUI on http://localhost:5555
 ```

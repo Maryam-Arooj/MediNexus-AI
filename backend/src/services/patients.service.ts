@@ -1,247 +1,181 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
-import { evaluateMedicalTriage, TriageInput } from '../triage/evaluateMedicalTriage';
+import { conflict, notFound } from '../lib/httpError';
+import { AuthUser } from '../middleware/auth';
+import { CaseInput } from '../validation/schemas';
+import { evaluateMedicalTriage } from '../triage/evaluateMedicalTriage';
+import { DEPARTMENTS, Department } from '../triage/triageConfig';
+import { allocatePatientId, allocateToken } from './counters';
+import { patientInclude, toPatientRecord } from './patientRecord';
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+const TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 };
 
-/**
- * Generate a unique SmartCare patient ID like SC-2026-XXXX
- */
-function generatePatientId(): string {
-  const year = new Date().getFullYear();
-  const num = Math.floor(1000 + Math.random() * 9000);
-  return `SC-${year}-${num}`;
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string })?.code === 'P2002';
 }
 
-/**
- * Generate a department-prefixed token number.
- * Looks at existing tokens in DB to determine the next number.
- */
-async function generateTokenNumber(department: string): Promise<string> {
-  const prefix = department === 'Dermatology' ? 'DERM' : 'GM';
-
-  // Count existing tokens for this department prefix
-  const existingCount = await prisma.patient.count({
-    where: { tokenNumber: { startsWith: prefix } },
+function triageFor(input: CaseInput, displayName: string) {
+  return evaluateMedicalTriage({
+    name: displayName,
+    age: input.age,
+    gender: input.gender,
+    symptoms: input.symptoms,
+    duration: input.duration,
   });
-
-  const num = existingCount + 1;
-  const padded = num < 10 ? `0${num}` : `${num}`;
-  return `${prefix}-${padded}`;
 }
 
-// ─── Formatted Response Builder ─────────────────────────────────────────────
-
 /**
- * Builds a PatientRecord-shaped object matching what the frontend expects.
- * The frontend PatientRecord type is:
- *   { id, tokenNumber, createdAt, name, age, gender, symptoms, duration,
- *     department, opdRoom, analysis: { riskLevel, redFlags, suggestedDepartment,
- *     possibleConditions, recommendedAction, shortDoctorSummary, confidenceScore },
- *     status, doctorNotes?, approvedAt?, approvedBy? }
+ * Creates a case for the logged-in patient. Counter allocation, patient, triage and review rows
+ * are written in ONE transaction: either everything is saved or nothing is.
+ * A repeated clientRequestId (double click / retry) returns the existing case instead of a duplicate.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildPatientRecord(patient: any, triage: any, review: any): object {
-  const effectiveAction =
-    review?.recommendedActionOverride || triage?.recommendedAction || '';
-
-  return {
-    id: patient.patientId,
-    tokenNumber: patient.tokenNumber,
-    createdAt: patient.createdAt
-      ? new Date(patient.createdAt).toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : 'Unknown',
-    name: patient.name,
-    age: patient.age,
-    gender: patient.gender,
-    symptoms: Array.isArray(patient.symptoms) ? patient.symptoms : [],
-    duration: patient.duration,
-    department: patient.department,
-    opdRoom: patient.assignedRoom,
-    analysis: triage
-      ? {
-          riskLevel: triage.riskLevel,
-          redFlags: Array.isArray(triage.redFlags) ? triage.redFlags : [],
-          suggestedDepartment: triage.riskLevel ? patient.department : 'General Medicine',
-          possibleConditions: Array.isArray(triage.possibleConditions)
-            ? triage.possibleConditions
-            : [],
-          recommendedAction: effectiveAction,
-          shortDoctorSummary: triage.doctorHandoverSummary,
-          confidenceScore: triage.confidenceScore,
-        }
-      : null,
-    status: review?.status || 'Pending Review',
-    doctorNotes: review?.clinicalNotes || undefined,
-    approvedAt: review?.approvedAt
-      ? new Date(review.approvedAt).toLocaleString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : undefined,
-    approvedBy: review?.approvedBy || undefined,
-    // Internal DB id for API calls
-    _dbId: patient.id,
-  };
-}
-
-// ─── Service Functions ───────────────────────────────────────────────────────
-
-/**
- * POST /api/patients
- * Registers a new patient, runs deterministic triage, saves to DB.
- */
-export async function registerPatient(input: TriageInput) {
-  // Run deterministic triage engine
-  const triageResult = evaluateMedicalTriage(input);
-
-  const isGenMed = triageResult.suggestedDepartment === 'General Medicine';
-  const assignedRoom = isGenMed
-    ? 'Room 104 — General Medicine OPD'
-    : 'Room 208 — Dermatology Clinic';
-
-  // Generate unique IDs
-  let patientId = generatePatientId();
-  // Ensure uniqueness (very unlikely collision but safe)
-  let attempts = 0;
-  while (await prisma.patient.findUnique({ where: { patientId } })) {
-    patientId = generatePatientId();
-    attempts++;
-    if (attempts > 10) throw new Error('Failed to generate unique patient ID');
+export async function createCase(user: AuthUser, input: CaseInput) {
+  if (input.clientRequestId) {
+    const existing = await prisma.patient.findFirst({
+      where: { userId: user.id, clientRequestId: input.clientRequestId },
+      include: patientInclude,
+    });
+    if (existing) return { record: toPatientRecord(existing, user.role), created: false };
   }
 
-  const tokenNumber = await generateTokenNumber(triageResult.suggestedDepartment);
+  const name = input.name || user.fullName;
+  const triage = triageFor(input, name);
+  const dept = triage.suggestedDepartment;
 
-  // Save Patient
-  const patient = await prisma.patient.create({
-    data: {
-      patientId,
-      name: input.name.trim() || 'Anonymous Patient',
-      age: Number(input.age),
-      gender: input.gender,
-      symptoms: input.symptoms,
-      duration: input.duration,
-      tokenNumber,
-      department: triageResult.suggestedDepartment,
-      assignedRoom,
-    },
-  });
-
-  // Save TriageResult
-  const triage = await prisma.triageResult.create({
-    data: {
-      patientId: patient.id,
-      riskLevel: triageResult.riskLevel,
-      redFlags: triageResult.redFlags,
-      possibleConditions: triageResult.possibleConditions,
-      recommendedAction: triageResult.recommendedAction,
-      doctorHandoverSummary: triageResult.doctorHandoverSummary,
-      confidenceScore: triageResult.confidenceScore,
-    },
-  });
-
-  // Save DoctorReview (initial Pending state)
-  const review = await prisma.doctorReview.create({
-    data: {
-      patientId: patient.id,
-      status: 'Pending Review',
-    },
-  });
-
-  return buildPatientRecord(patient, triage, review);
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const tokenNumber = await allocateToken(tx, DEPARTMENTS[dept].tokenPrefix);
+      const patientId = await allocatePatientId(tx);
+      return tx.patient.create({
+        data: {
+          patientId,
+          tokenNumber,
+          name,
+          age: input.age,
+          gender: input.gender,
+          symptoms: input.symptoms,
+          duration: input.duration,
+          department: dept,
+          assignedRoom: DEPARTMENTS[dept].room,
+          userId: user.id,
+          clientRequestId: input.clientRequestId ?? null,
+          triage: {
+            create: {
+              riskLevel: triage.riskLevel,
+              riskReason: triage.riskReason,
+              redFlags: triage.redFlags,
+              possibleConditions: triage.possibleConditions,
+              recommendedAction: triage.recommendedAction,
+              doctorHandoverSummary: triage.doctorHandoverSummary,
+              engineVersion: triage.engineVersion,
+            },
+          },
+          review: { create: { status: 'Pending Review' } },
+        },
+        include: patientInclude,
+      });
+    }, TX_OPTIONS);
+    return { record: toPatientRecord(created, user.role), created: true };
+  } catch (err) {
+    // Two identical submissions raced each other: return the one that won.
+    if (input.clientRequestId && isUniqueViolation(err)) {
+      const existing = await prisma.patient.findFirst({
+        where: { userId: user.id, clientRequestId: input.clientRequestId },
+        include: patientInclude,
+      });
+      if (existing) return { record: toPatientRecord(existing, user.role), created: false };
+    }
+    throw err;
+  }
 }
 
-/**
- * GET /api/patients
- * Returns all patients with triage and review data.
- */
-export async function getAllPatients() {
-  const patients = await prisma.patient.findMany({
-    include: { triage: true, review: true },
+/** Patient: own cases only, newest first. */
+export async function listMyCases(user: AuthUser) {
+  const rows = await prisma.patient.findMany({
+    where: { userId: user.id },
+    include: patientInclude,
     orderBy: { createdAt: 'desc' },
   });
-
-  return patients.map((p) => buildPatientRecord(p, p.triage, p.review));
+  return rows.map((p) => toPatientRecord(p, user.role));
 }
 
 /**
- * GET /api/patients/:id
- * Returns a single patient by patientId (e.g. "SC-2026-1042").
+ * Doctors may open any case. Patients may open only their own; someone else's case returns
+ * 404 (not 403) so patients cannot discover which ids exist.
  */
-export async function getPatientById(patientId: string) {
-  const patient = await prisma.patient.findUnique({
-    where: { patientId },
-    include: { triage: true, review: true },
-  });
-
-  if (!patient) return null;
-  return buildPatientRecord(patient, patient.triage, patient.review);
+export async function getCaseForUser(user: AuthUser, publicId: string) {
+  const p = await prisma.patient.findUnique({ where: { patientId: publicId }, include: patientInclude });
+  if (!p || (user.role !== 'DOCTOR' && p.userId !== user.id)) throw notFound('Case not found.');
+  return toPatientRecord(p, user.role);
 }
 
 /**
- * PUT /api/patients/:id/review
- * Updates doctor clinical notes and optional action override.
+ * Patient edits their own case (Edit Symptoms). Allowed only while still "Pending Review".
+ * Keeps the same patient id; issues a new token only if the department changes.
+ * No write at all when nothing changed.
  */
-export async function updatePatientReview(
-  patientId: string,
-  data: { clinicalNotes?: string; recommendedActionOverride?: string; status?: string }
-) {
-  const patient = await prisma.patient.findUnique({ where: { patientId } });
-  if (!patient) return null;
+export async function updateMyCase(user: AuthUser, publicId: string, input: CaseInput) {
+  const p = await prisma.patient.findUnique({ where: { patientId: publicId }, include: patientInclude });
+  if (!p || p.userId !== user.id) throw notFound('Case not found.');
+  if ((p.review?.status ?? 'Pending Review') !== 'Pending Review') {
+    throw conflict('A doctor has already started reviewing this case, so it can no longer be edited.');
+  }
 
-  const review = await prisma.doctorReview.upsert({
-    where: { patientId: patient.id },
-    update: {
-      clinicalNotes: data.clinicalNotes,
-      recommendedActionOverride: data.recommendedActionOverride,
-      status: data.status || 'Under Review',
-    },
-    create: {
-      patientId: patient.id,
-      clinicalNotes: data.clinicalNotes,
-      recommendedActionOverride: data.recommendedActionOverride,
-      status: data.status || 'Under Review',
-    },
-  });
+  const name = input.name || p.name;
+  const sameSymptoms =
+    JSON.stringify([...(p.symptoms as string[])].sort()) === JSON.stringify([...input.symptoms].sort());
+  if (
+    name === p.name &&
+    input.age === p.age &&
+    input.gender === p.gender &&
+    input.duration === p.duration &&
+    sameSymptoms
+  ) {
+    return { record: toPatientRecord(p, user.role), changed: false };
+  }
 
-  const triage = await prisma.triageResult.findUnique({ where: { patientId: patient.id } });
-  return buildPatientRecord(patient, triage, review);
+  const triage = triageFor(input, name);
+  const dept: Department = triage.suggestedDepartment;
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // Re-check the status inside the transaction so a doctor review that started meanwhile wins.
+    const locked = await tx.doctorReview.updateMany({
+      where: { patientId: p.id, status: 'Pending Review' },
+      data: { status: 'Pending Review' },
+    });
+    if (locked.count === 0) {
+      throw conflict('A doctor has already started reviewing this case, so it can no longer be edited.');
+    }
+    const tokenNumber =
+      dept === p.department ? p.tokenNumber : await allocateToken(tx, DEPARTMENTS[dept].tokenPrefix);
+    const triageData = {
+      riskLevel: triage.riskLevel,
+      riskReason: triage.riskReason,
+      redFlags: triage.redFlags,
+      possibleConditions: triage.possibleConditions,
+      recommendedAction: triage.recommendedAction,
+      doctorHandoverSummary: triage.doctorHandoverSummary,
+      engineVersion: triage.engineVersion,
+      confidenceScore: null,
+    };
+    return tx.patient.update({
+      where: { id: p.id },
+      data: {
+        name,
+        age: input.age,
+        gender: input.gender,
+        symptoms: input.symptoms,
+        duration: input.duration,
+        department: dept,
+        assignedRoom: DEPARTMENTS[dept].room,
+        tokenNumber,
+        triage: { upsert: { create: triageData, update: triageData } },
+      },
+      include: patientInclude,
+    });
+  }, TX_OPTIONS);
+
+  return { record: toPatientRecord(updated, user.role), changed: true };
 }
 
-/**
- * POST /api/patients/:id/approve
- * Marks the patient triage as approved.
- */
-export async function approvePatient(
-  patientId: string,
-  data: { approvedBy?: string; clinicalNotes?: string }
-) {
-  const patient = await prisma.patient.findUnique({ where: { patientId } });
-  if (!patient) return null;
-
-  const review = await prisma.doctorReview.upsert({
-    where: { patientId: patient.id },
-    update: {
-      status: 'Approved',
-      approvedBy: data.approvedBy || 'Dr. Resident Medical Officer',
-      approvedAt: new Date(),
-      clinicalNotes: data.clinicalNotes,
-    },
-    create: {
-      patientId: patient.id,
-      status: 'Approved',
-      approvedBy: data.approvedBy || 'Dr. Resident Medical Officer',
-      approvedAt: new Date(),
-      clinicalNotes: data.clinicalNotes,
-    },
-  });
-
-  const triage = await prisma.triageResult.findUnique({ where: { patientId: patient.id } });
-  return buildPatientRecord(patient, triage, review);
-}
+export type { Prisma };

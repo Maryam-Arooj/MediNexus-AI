@@ -1,4 +1,4 @@
-// This is your Prisma schema file
+// MediNexus AI — Prisma schema
 // https://www.prisma.io/docs/concepts/components/prisma-schema
 
 generator client {
@@ -10,25 +10,60 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Patient {
-  id          String   @id @default(cuid())
-  patientId   String   @unique // e.g. "SC-2026-1042"
-  name        String   @default("Anonymous Patient")
-  age         Int
-  gender      String
-  symptoms    Json     // String[]
-  duration    String
-  tokenNumber String   @unique // e.g. "GM-042" or "DERM-018"
-  department  String
-  assignedRoom String
-  createdAt   DateTime @default(now())
+/// Account role. PATIENT is the only role public sign-up can create.
+/// DOCTOR is granted only by the provisioning script (npm run doctor:provision).
+enum Role {
+  PATIENT
+  DOCTOR
+}
 
-  userId    String?  // optional FK to User — set when patient registered via auth
-  user      User?    @relation(fields: [userId], references: [id])
+model User {
+  id           String   @id @default(cuid())
+  fullName     String
+  cnic         String   @unique
+  email        String?  @unique
+  phone        String?
+  passwordHash String
+  role         Role     @default(PATIENT)
+  /// Incremented on logout; JWTs carrying an older version are rejected.
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  patients        Patient[]
+  reviewsDone     DoctorReview[] @relation("ReviewedBy")
+  reviewsApproved DoctorReview[] @relation("ApprovedBy")
+
+  @@map("users")
+}
+
+model Patient {
+  id           String   @id @default(cuid())
+  patientId    String   @unique // public id, e.g. "SC-2026-0007"
+  name         String   @default("Anonymous Patient")
+  age          Int
+  gender       String
+  symptoms     Json // string[]
+  duration     String
+  tokenNumber  String   @unique // e.g. "GM-01", "DERM-07" — allocated from token_counters, never reused
+  department   String
+  assignedRoom String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  /// Owner account (patient who submitted the case). Null only for legacy rows created before accounts were linked.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  /// Client-generated id for one form submission; makes retries/double-clicks idempotent per user.
+  clientRequestId String?
 
   triage TriageResult?
   review DoctorReview?
 
+  @@unique([userId, clientRequestId])
+  @@index([userId])
+  @@index([createdAt])
   @@map("patients")
 }
 
@@ -36,43 +71,65 @@ model TriageResult {
   id                    String   @id @default(cuid())
   patientId             String   @unique
   patient               Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  riskLevel             String   // "Low" | "Medium" | "High"
-  redFlags              Json     // String[]
-  possibleConditions    Json     // String[]
+  riskLevel             String // "Low" | "Medium" | "High"
+  redFlags              Json // string[]
+  possibleConditions    Json // string[]
   recommendedAction     String
   doctorHandoverSummary String
-  confidenceScore       Int
+  /// Legacy column: older rows hold a hard-coded 94. No longer written or shown.
+  confidenceScore       Int?
+  /// Which version of the rule set produced this result.
+  engineVersion         String   @default("rules-v1")
+  /// Plain-language explanation of the rule that set the risk level.
+  riskReason            String?
   createdAt             DateTime @default(now())
 
   @@map("triage_results")
 }
 
 model DoctorReview {
-  id                       String    @id @default(cuid())
-  patientId                String    @unique
-  patient                  Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  status                   String    @default("Pending Review") // "Pending Review" | "Under Review" | "Approved"
-  clinicalNotes            String?
+  id                        String  @id @default(cuid())
+  patientId                 String  @unique
+  patient                   Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  status                    String  @default("Pending Review") // "Pending Review" | "Under Review" | "Approved"
+  clinicalNotes             String?
   recommendedActionOverride String?
-  approvedBy               String?
-  approvedAt               DateTime?
-  updatedAt                DateTime  @updatedAt
 
+  reviewedById String?
+  reviewedBy   User?     @relation("ReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt   DateTime?
+
+  /// Display-name snapshot of the approving doctor (kept even if the account changes).
+  approvedBy   String?
+  approvedById String?
+  approver     User?     @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
   @@map("doctor_reviews")
 }
 
-model User {
-  id           String    @id @default(cuid())
-  fullName     String
-  cnic         String    @unique
-  email        String?   @unique
-  phone        String?
-  passwordHash String
-  role         String    @default("patient") // "patient" | "doctor"
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+/// Monotonic counters used for token numbers (key "GM", "DERM") and public patient ids (key "PID-2026").
+/// Values only ever increase, so a number is never handed out twice — even after deletions.
+model TokenCounter {
+  key       String   @id
+  value     Int
+  updatedAt DateTime @default(now()) @updatedAt
 
-  patients Patient[]
+  @@map("token_counters")
+}
 
-  @@map("users")
+/// Audit trail for role changes made by migrations or the provisioning script.
+model RoleChangeAudit {
+  id        String   @id @default(cuid())
+  userId    String
+  oldRole   String
+  newRole   String
+  reason    String
+  changedAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("role_change_audit")
 }

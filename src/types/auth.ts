@@ -1,4 +1,5 @@
-export type UserRole = 'patient' | 'doctor';
+/** Roles come from the server (GET /api/auth/me). The frontend never decides a user's role. */
+export type UserRole = 'PATIENT' | 'DOCTOR';
 
 export interface AuthUser {
   id: string;
@@ -8,13 +9,6 @@ export interface AuthUser {
   phone: string | null;
   role: UserRole;
   createdAt: string;
-}
-
-export interface AuthState {
-  user: AuthUser | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
 }
 
 export interface LoginInput {
@@ -29,7 +23,6 @@ export interface RegisterInput {
   email: string;
   password: string;
   confirmPassword: string;
-  role: UserRole;
 }
 
 export interface AuthResponse {

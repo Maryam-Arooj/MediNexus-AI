@@ -1,167 +1,115 @@
 /**
- * SmartCare API Client
- * All calls to the backend Express server.
- * If backend is unavailable, throws an error — NO silent fallback to mock data.
+ * MediNexus AI API client. All calls go to the Express backend via the Vite /api proxy.
+ * The JWT is only a session credential — authorization is always enforced by the server.
  */
-
-import { PatientRecord, PatientRegistrationInput } from '../types/medical';
-import { AuthUser, AuthResponse, LoginInput, RegisterInput } from '../types/auth';
+import { CaseFormInput, PatientRecord, TriageOptions } from '../types/medical';
+import { AuthResponse, AuthUser, LoginInput, RegisterInput } from '../types/auth';
 
 const API_BASE = '/api';
-
-// ─── Token helpers ────────────────────────────────────────────────────────────
-
-const TOKEN_KEY = 'smartcare_token';
+const TOKEN_KEY = 'medinexus_token';
+export const UNAUTHORIZED_EVENT = 'medinexus:unauthorized';
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
-
 export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable */
+  }
 }
-
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem('smartcare_token'); // legacy key from older builds
+  } catch {
+    /* storage unavailable */
+  }
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public details?: Record<string, string>) {
+    super(message);
+  }
 }
 
-// ─── Core fetch wrapper ───────────────────────────────────────────────────────
-
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<{ data: T; meta?: Record<string, unknown> }> {
   const token = getToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
-
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...options,
-      headers: { ...headers, ...(options?.headers as Record<string, string> || {}) },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...((options.headers as Record<string, string>) || {}),
+      },
     });
   } catch {
-    throw new Error(
-      'Cannot reach the MediNexus AI backend. Make sure the backend server is running on port 3001.'
-    );
+    throw new ApiError(0, 'Cannot reach the MediNexus AI server. Make sure the backend is running on port 3001.');
   }
 
-  const body: ApiResponse<T> = await res.json();
+  let body: { success?: boolean; data?: T; error?: string; details?: Record<string, string>; meta?: Record<string, unknown> } = {};
+  try {
+    body = await res.json();
+  } catch {
+    // Non-JSON (e.g. proxy error page) — fall through with a generic message.
+  }
 
+  if (res.status === 401 && token) {
+    clearToken();
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  }
   if (!res.ok || !body.success) {
-    throw new Error(body.error || `Server error: ${res.status}`);
+    const fallback = res.status >= 500 ? 'The server had a problem. Please try again.' : `Request failed (${res.status}).`;
+    throw new ApiError(res.status, body.error || fallback, body.details);
   }
-
-  return body.data as T;
+  return { data: body.data as T, meta: body.meta };
 }
 
-// ─── Auth API ─────────────────────────────────────────────────────────────────
-
-export async function authRegister(input: RegisterInput): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-export async function authLogin(input: LoginInput): Promise<AuthResponse> {
-  return apiFetch<AuthResponse>('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-export async function authMe(): Promise<AuthUser> {
-  return apiFetch<AuthUser>('/auth/me');
-}
-
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export const authRegister = async (input: RegisterInput) =>
+  (await apiFetch<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) })).data;
+export const authLogin = async (input: LoginInput) =>
+  (await apiFetch<AuthResponse>('/auth/login', { method: 'POST', body: JSON.stringify(input) })).data;
+export const authMe = async () => (await apiFetch<AuthUser>('/auth/me')).data;
 export async function authLogout(): Promise<void> {
-  await apiFetch('/auth/logout', { method: 'POST' });
-  clearToken();
-}
-
-// ─── Patient API ──────────────────────────────────────────────────────────────
-
-/**
- * POST /api/patients
- * Registers a patient, runs deterministic triage on the backend,
- * saves to PostgreSQL, returns a full PatientRecord.
- */
-export async function registerPatient(
-  input: PatientRegistrationInput
-): Promise<PatientRecord> {
-  return apiFetch<PatientRecord>('/patients', {
-    method: 'POST',
-    body: JSON.stringify({
-      name: input.name,
-      age: input.age,
-      gender: input.gender,
-      symptoms: input.symptoms,
-      duration: input.duration,
-    }),
-  });
-}
-
-/**
- * GET /api/patients
- * Returns all patients from PostgreSQL for the Doctor Dashboard.
- */
-export async function fetchAllPatients(): Promise<PatientRecord[]> {
-  return apiFetch<PatientRecord[]>('/patients');
-}
-
-/**
- * GET /api/patients/:id
- * Returns a single patient record by patientId (e.g. "SC-2026-1042").
- */
-export async function fetchPatient(patientId: string): Promise<PatientRecord> {
-  return apiFetch<PatientRecord>(`/patients/${patientId}`);
-}
-
-/**
- * PUT /api/patients/:id/review
- * Saves doctor edits (notes + action override) to PostgreSQL.
- */
-export async function savePatientReview(
-  patientId: string,
-  data: {
-    clinicalNotes?: string;
-    recommendedActionOverride?: string;
-    status?: string;
+  try {
+    await apiFetch('/auth/logout', { method: 'POST' }); // revokes the token on the server
+  } finally {
+    clearToken();
   }
-): Promise<PatientRecord> {
-  return apiFetch<PatientRecord>(`/patients/${patientId}/review`, {
+}
+
+// ─── Triage options (single source of truth: the backend rule engine) ─────────
+export const fetchTriageOptions = async () => (await apiFetch<TriageOptions>('/triage/options')).data;
+
+// ─── Patient (own cases only) ─────────────────────────────────────────────────
+const caseBody = (input: CaseFormInput, clientRequestId?: string) =>
+  JSON.stringify({ ...input, ...(clientRequestId ? { clientRequestId } : {}) });
+
+export const createCase = async (input: CaseFormInput, clientRequestId: string) =>
+  (await apiFetch<PatientRecord>('/patients', { method: 'POST', body: caseBody(input, clientRequestId) })).data;
+export const updateCase = async (id: string, input: CaseFormInput) =>
+  (await apiFetch<PatientRecord>(`/patients/${encodeURIComponent(id)}`, { method: 'PUT', body: caseBody(input) })).data;
+export const fetchMyCases = async () => (await apiFetch<PatientRecord[]>('/patients/mine')).data;
+export const fetchCase = async (id: string) => (await apiFetch<PatientRecord>(`/patients/${encodeURIComponent(id)}`)).data;
+
+// ─── Doctor only ──────────────────────────────────────────────────────────────
+export const fetchDoctorQueue = async () => (await apiFetch<PatientRecord[]>('/doctor/patients')).data;
+export async function saveReview(id: string, data: { clinicalNotes?: string; recommendedAction?: string }) {
+  const r = await apiFetch<PatientRecord>(`/doctor/patients/${encodeURIComponent(id)}/review`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
+  return { record: r.data, changed: Boolean(r.meta?.changed) };
 }
-
-/**
- * POST /api/patients/:id/approve
- * Approves the triage for a patient, saves to PostgreSQL.
- */
-export async function approvePatient(
-  patientId: string,
-  data: { approvedBy?: string; clinicalNotes?: string }
-): Promise<PatientRecord> {
-  return apiFetch<PatientRecord>(`/patients/${patientId}/approve`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-/**
- * GET /api/health
- * Checks if backend and PostgreSQL are reachable.
- */
-export async function checkHealth(): Promise<{ status: string; database: string }> {
-  return apiFetch('/health');
-}
+export const approveCase = async (id: string, data: { clinicalNotes?: string }) =>
+  (await apiFetch<PatientRecord>(`/doctor/patients/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify(data) })).data;
+export const reopenCase = async (id: string) =>
+  (await apiFetch<PatientRecord>(`/doctor/patients/${encodeURIComponent(id)}/reopen`, { method: 'POST' })).data;

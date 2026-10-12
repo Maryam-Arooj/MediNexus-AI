@@ -1,24 +1,13 @@
 import { Router } from 'express';
-import {
-  createPatient,
-  listPatients,
-  getPatient,
-  reviewPatient,
-  approvePatient,
-} from '../controllers/patients.controller';
+import { requireAuth, requireRole } from '../middleware/auth';
+import { ah } from './asyncHandler';
+import * as c from '../controllers/patients.controller';
 
-const router = Router();
-
-// POST   /api/patients          — register patient + triage
-// GET    /api/patients          — list all patients
-// GET    /api/patients/:id      — get single patient by patientId
-// PUT    /api/patients/:id/review   — doctor saves edits
-// POST   /api/patients/:id/approve — doctor approves
-
-router.post('/', createPatient);
-router.get('/', listPatients);
-router.get('/:id', getPatient);
-router.put('/:id/review', reviewPatient);
-router.post('/:id/approve', approvePatient);
-
-export default router;
+// Patient-facing case endpoints. Every route requires login; ownership is enforced in the service.
+const r = Router();
+r.use(requireAuth);
+r.post('/', requireRole('PATIENT'), ah(c.create));
+r.get('/mine', requireRole('PATIENT'), ah(c.listMine));
+r.get('/:id', requireRole('PATIENT', 'DOCTOR'), ah(c.getOne)); // patient: own only (404 otherwise)
+r.put('/:id', requireRole('PATIENT'), ah(c.update)); // edit own case while still pending
+export default r;

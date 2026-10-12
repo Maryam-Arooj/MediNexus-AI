@@ -1,168 +1,205 @@
-# MediNexus AI — Setup Guide
+# MediNexus AI — Setup Guide (Windows)
 
-## Prerequisites
+All commands are for **Windows PowerShell**. Run them from the folder shown in each step.
 
-- **Node.js** 18+ and npm
-- **PostgreSQL** running locally on port 5432
-- A PostgreSQL database named `smartcare` (created automatically by Prisma migrate if permissions allow)
+## 1. Prerequisites
 
----
+- **Node.js 18 or newer** (check with `node -v`)
+- **PostgreSQL 14 or newer** running on `localhost:5432` (pgAdmin optional)
+- The PostgreSQL bin folder on your PATH so that `psql`, `pg_dump` and `createdb` work. If they don't:
+  ```powershell
+  $env:Path += ";C:\Program Files\PostgreSQL\16\bin"
+  ```
 
-## 1. Clone and Install
+## 2. Install dependencies
 
-```bash
-# Frontend dependencies
+```powershell
+cd "D:\MediNexus AI"
 npm install
-
-# Backend dependencies
 cd backend
 npm install
-cd ..
+npx prisma generate
 ```
 
----
+## 3. Configure the backend (`backend\.env`)
 
-## 2. Configure Environment
-
-Copy the example env file and fill in your PostgreSQL credentials:
-
-```bash
-cd backend
-copy .env.example .env   # Windows
-# cp .env.example .env   # macOS/Linux
+```powershell
+cd "D:\MediNexus AI\backend"
+Copy-Item .env.example .env      # only if you don't have a .env yet
+notepad .env
 ```
 
-Edit `backend/.env`:
-```ini
-DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/smartcare
-PORT=3001
-JWT_SECRET=your_secure_random_jwt_secret_here
+| Variable | What to put |
+|---|---|
+| `DATABASE_URL` | `postgresql://postgres:YOUR_DB_PASSWORD@localhost:5432/smartcare` |
+| `JWT_SECRET` | A random value of **at least 32 characters**. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`. The server refuses to start without it, and it also refuses the old value that used to be hard-coded in the source. |
+| `JWT_EXPIRES_IN` | Session length, default `8h` |
+| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:4173` |
+| `DEMO_DOCTOR_EMAIL` / `DEMO_DOCTOR_PASSWORD` / `DEMO_DOCTOR_NAME` | Your **own** demo doctor login (see step 6). The password needs 12+ characters with letters and numbers. |
+
+`backend\.env` is git-ignored. Never commit it.
+
+## 4. Back up your database, then apply migrations
+
+**Always back up before migrating:**
+
+```powershell
+cd "D:\MediNexus AI\backend"
+pg_dump -U postgres -h localhost -d smartcare -F c -f smartcare_backup_before_repair.dump
 ```
 
-> **Never commit `.env` to git.** It is strictly listed in `.gitignore`. A secure default key is used if `JWT_SECRET` is left blank.
+Optionally, check what's in the database first (read-only; prints counts only, no personal data):
 
----
-
-## 3. Database Setup
-
-```bash
-cd backend
-
-# Generate Prisma client + apply migrations
-npx prisma migrate dev
-
-# Seed database verification (idempotent)
-npm run db:seed
+```powershell
+npm run db:inspect
 ```
 
----
+Then apply the migrations:
 
-## 4. Start the Backend
+```powershell
+npm run db:migrate          # = prisma migrate deploy  (never resets or drops anything)
+npm run db:status           # should say "Database schema is up to date"
+npm run db:inspect          # check counters, linked/unlinked cases, role audit
+```
 
-```bash
-cd backend
+> ⚠️ Use `db:migrate` (`prisma migrate deploy`). Do **not** use `prisma migrate reset`, and don't accept a reset prompt from `prisma migrate dev`, because a reset deletes all data.
+
+What the repair migration (`20261012090000_security_and_integrity`) does:
+
+- Adds `token_counters` and starts each counter at the **highest token and patient id already in your database**, so no old token is ever reissued.
+- Converts `users.role` to `PATIENT | DOCTOR`. Accounts that picked "doctor" on the old public sign-up form were never verified, so they are set to `PATIENT`. Each change is written to `role_change_audit`, so nothing is lost.
+- Adds reviewer/approver columns, an idempotency key, a session-revocation counter (`tokenVersion`) and indexes.
+- Back-fills a review row for any old patient that was missing one.
+- **Drops no tables and deletes or changes no patient rows.**
+
+To undo everything, restore the backup:
+
+```powershell
+pg_restore -U postgres -h localhost -d smartcare --clean smartcare_backup_before_repair.dump
+```
+
+## 5. Start the application (two terminals)
+
+```powershell
+# Terminal 1 — backend (http://localhost:3001)
+cd "D:\MediNexus AI\backend"
 npm run dev
 ```
 
-Expected output:
-```
-✅ PostgreSQL connected
-🚀 MediNexus AI backend running at http://localhost:3001
-   Health: http://localhost:3001/api/health
-   Patients: http://localhost:3001/api/patients
-```
-
-Verify: Open `http://localhost:3001/api/health` — should return:
-```json
-{
-  "success": true,
-  "status": "ok",
-  "api": "MediNexus AI Backend",
-  "database": "PostgreSQL — connected"
-}
-```
-
----
-
-## 5. Start the Frontend
-
-In a **separate terminal**, from the project root:
-
-```bash
+```powershell
+# Terminal 2 — frontend (http://localhost:5173)
+cd "D:\MediNexus AI"
 npm run dev
 ```
 
-Open `http://localhost:5173`.
+Health check: <http://localhost:3001/api/health>
 
-The Vite development server automatically proxies `/api/*` requests to the Express backend on port 3001.
+## 6. Create the demo doctor account
 
----
+Doctor accounts **cannot** be created through the public sign-up page. They are only created by this script:
 
-## 6. Quick Verification Walkthrough
+1. Set these in `backend\.env` (use your own values; never commit them):
+   ```ini
+   DEMO_DOCTOR_EMAIL=dr.yourname@yourdomain.pk
+   DEMO_DOCTOR_PASSWORD=SomethingLong2026
+   DEMO_DOCTOR_NAME=Dr. Your Name
+   DEMO_DOCTOR_CNIC=            # optional
+   ```
+2. Run:
+   ```powershell
+   cd "D:\MediNexus AI\backend"
+   npm run doctor:provision
+   ```
 
-1. **Splash Screen:** Open `http://localhost:5173` — displays the 3-second animated MediNexus AI branding screen.
-2. **Account Registration:** Click **Register** on the Login screen, choose **Patient** or **Doctor**, fill out the form, and register.
-3. **Login:** Log in with your newly registered CNIC or Email + Password.
-4. **Role Selection:** Select **Patient** to enter the OPD Pre-Registration flow or **Doctor** to enter the Doctor Dashboard.
-5. **Patient Pre-Registration:** On Screen 1, enter symptoms (or click the quick "Fever Case" demo button) and click **Start AI Check**.
-6. **AI Triage & Slip:** Inspect the AI Triage Assessment on Screen 2, then generate and print the Digital Parchi on Screen 3.
-7. **Doctor Review:** Log out and log in using doctor credentials, open the Doctor Dashboard (Screen 4), open the patient report, edit clinical notes, and click **Approve Triage**.
-8. **Persistence:** Refresh the browser — all patient records, doctor notes, and approvals remain persisted in PostgreSQL.
+The script is safe to run again:
 
----
+| Situation | Result |
+|---|---|
+| No account with that email | Creates a **DOCTOR** (bcrypt-hashed password) |
+| Already a doctor | Nothing changes; the password is **not** reset |
+| Email belongs to a **patient** account | Stops and changes nothing. To promote it, run `npm run doctor:provision -- --promote-existing`. This only works if `DEMO_DOCTOR_PASSWORD` matches that account's current password, and the change is audited. |
+| `NODE_ENV=production` | Refuses, unless `ALLOW_DOCTOR_PROVISIONING_IN_PRODUCTION=true` is set deliberately |
+| Placeholder or weak password | Refuses |
 
-## Production Build
+**Old demo doctor (e.g. `doctor.test@smartcare.com`):** the migration set it to PATIENT, because the old sign-up let anyone pick "doctor". To restore it, put that email and its current password in `DEMO_DOCTOR_EMAIL` / `DEMO_DOCTOR_PASSWORD` and run `npm run doctor:provision -- --promote-existing`.
 
-```bash
-# Backend TypeScript compile
-cd backend
-npm run build
-npm start
+**Adding a real doctor later:** run the same script with that doctor's details in the environment. Only someone with access to the server's `.env` and shell can do this.
 
-# Frontend production build
-cd ..
-npm run build
-npm run preview   # serves dist/ on port 4173
+## 7. Logging in
+
+| Who | How | Lands on |
+|---|---|---|
+| Patient | Register at `/register` (CNIC, name, password), or log in with CNIC or email | `/patient` (My Visits) |
+| Doctor | Log in with `DEMO_DOCTOR_EMAIL` + `DEMO_DOCTOR_PASSWORD` | `/doctor` |
+
+## 8. How authorization works
+
+- **Public sign-up only ever creates `PATIENT` accounts.** Any `role` field sent by a browser is ignored.
+- Every protected API call needs `Authorization: Bearer <token>`. The server checks the token signature, then **re-reads the user and their role from PostgreSQL on every request**. Editing local storage or the token cannot grant extra rights.
+- `/api/doctor/*` is **DOCTOR only** (a patient gets `403`). `/api/patients/*` is for patients, who only ever see **their own** cases (someone else's case returns `404`).
+- Logout calls `/api/auth/logout`, which increases `tokenVersion`. Every token issued before that stops working (`401`).
+- The frontend also routes by the server-reported role: patients who open `/doctor` are sent to `/patient`, and doctors who open `/patient` are sent to `/doctor`. This is only a convenience; the server enforces the real rules.
+
+## 9. Running the tests
+
+### Backend (unit + API integration, uses a separate test database)
+
+```powershell
+createdb -U postgres -h localhost medinexus_test
+cd "D:\MediNexus AI\backend"
+Copy-Item .env.test.example .env.test   # if .env.test doesn't exist; set your DB password
+npm test            # applies migrations to medinexus_test, then runs the tests
+npm run typecheck
 ```
 
----
+The test runner refuses to start unless `DATABASE_URL` in `.env.test` points to a database whose name ends in `_test`. The tests delete all rows in that database.
+
+### Frontend (unit tests, type check, production build)
+
+```powershell
+cd "D:\MediNexus AI"
+npm test
+npm run typecheck
+npm run build
+```
+
+### End-to-end (browser) tests
+
+These create real accounts and cases, so run the backend against the **test** database:
+
+```powershell
+# Terminal 1
+cd "D:\MediNexus AI\backend"
+$env:ENV_FILE=".env.test"; npm run doctor:provision    # needs DEMO_DOCTOR_* in .env.test
+$env:ENV_FILE=".env.test"; npm run dev
+
+# Terminal 2
+cd "D:\MediNexus AI"
+npm run dev
+
+# Terminal 3 (first time only: npx playwright install chromium)
+cd "D:\MediNexus AI"
+$env:E2E_DOCTOR_EMAIL="<DEMO_DOCTOR_EMAIL from .env.test>"
+$env:E2E_DOCTOR_PASSWORD="<DEMO_DOCTOR_PASSWORD from .env.test>"
+npm run test:e2e
+```
+
+## 10. Production build
+
+```powershell
+cd "D:\MediNexus AI\backend"; npm run build; npm start
+cd "D:\MediNexus AI"; npm run build; npm run preview
+```
+
+Rebuild the backend (`npm run build`) after pulling changes; `backend\dist` holds compiled code and is not updated automatically.
 
 ## Troubleshooting
 
-| Issue | Fix |
+| Problem | Fix |
 |---|---|
-| `Cannot reach the MediNexus AI backend` | Ensure the backend server is running on port 3001 (`npm run dev` in `backend/`) |
-| `Failed to connect to PostgreSQL` | Verify local PostgreSQL service is started and credentials in `backend/.env` match |
-| `Migration failed` | Ensure the database exists and your PostgreSQL user has `CREATE` privileges |
-| Port 5173 in use | Vite will automatically select the next available port (e.g. 5174) |
-| `Invalid credentials` | Verify you typed the exact CNIC or Email and password used during registration |
-
----
-
-## Project Structure
-
-```
-MediNexus-AI/
-├── src/                          # React frontend
-│   ├── components/               # Clinical screens (1-4) & Navbar
-│   │   └── auth/                 # Splash, Login, Register, RoleSelect
-│   ├── context/                  # AuthContext (JWT session management)
-│   ├── api/                      # client.ts (REST API client)
-│   ├── types/                    # TypeScript interfaces (medical, auth)
-│   └── data/                     # Mock symptom categories & duration options
-├── backend/
-│   ├── prisma/                   # schema.prisma, migrations, seed.ts
-│   └── src/
-│       ├── controllers/          # auth & patients controllers
-│       ├── routes/               # /api/health, /api/auth, /api/patients
-│       ├── middleware/           # authMiddleware, errorHandler
-│       ├── services/             # patients.service.ts
-│       └── triage/               # evaluateMedicalTriage.ts
-├── README.md                     # Main project overview
-├── USER_GUIDE.md                 # Complete step-by-step user manual
-├── SETUP.md                      # This file
-├── REQUIREMENTS.md               # Functional & non-functional requirements
-├── ARCHITECTURE.md               # System architecture & component design
-├── API.md                        # REST API endpoint reference
-└── DATABASE.md                   # Database schema & Prisma models
-```
+| `Configuration error: JWT_SECRET …` | Set a new random `JWT_SECRET` (32+ characters) in `backend\.env` |
+| `Cannot reach the MediNexus AI server` | Start the backend (`npm run dev` in `backend`) |
+| `Failed to connect to PostgreSQL` | Start the PostgreSQL service; check `DATABASE_URL` |
+| Logged out after restarting with a new secret | Expected: old tokens are signed with the old secret. Log in again. |
+| Old doctor account now opens the patient page | Expected after the migration. See step 6, `--promote-existing`. |
+| `Too many attempts` | Login rate limit (`AUTH_RATE_LIMIT_MAX` per 15 minutes); wait or raise it for local testing |

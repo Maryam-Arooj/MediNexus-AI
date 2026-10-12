@@ -28,3 +28,13 @@ backend/node_modules/.prisma/
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# Database backups contain patient data — never commit them
+*.dump
+*.backup
+*.sql.gz
