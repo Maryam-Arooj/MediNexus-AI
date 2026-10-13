@@ -125,6 +125,7 @@ export const DocumentExplainer: React.FC = () => {
             {loading ? 'Reading the document…' : 'Explain'}
           </button>
         </div>
+        {loading && <p className="text-right text-xs text-slate-500">This can take up to 45 seconds.</p>}
         {error && (
           <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" /> {error}

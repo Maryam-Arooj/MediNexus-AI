@@ -444,9 +444,12 @@ export const Screen4DoctorDashboard: React.FC = () => {
                         className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
                       >
                         {aiLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                        {aiSummary ? 'Regenerate' : 'Generate AI summary'}
+                        {aiLoading ? 'Generating…' : aiSummary ? 'Regenerate' : 'Generate AI summary'}
                       </button>
                     </div>
+                    {aiLoading && (
+                      <p className="text-[11px] text-slate-500">AI is preparing the summary. This can take up to 45 seconds.</p>
+                    )}
                     {!aiSummary && !aiError && !aiLoading && (
                       <p className="text-[11px] text-slate-500">Sends only age, gender, symptoms, duration and the rule result to the AI — no name, CNIC or contact details.</p>
                     )}
