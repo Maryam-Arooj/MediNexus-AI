@@ -6,6 +6,7 @@ import request from 'supertest';
 import { createApp } from '../src/app';
 import { loadConfig } from '../src/config/env';
 import { sanitizeSymptomAnalysis } from '../src/ai/symptomAssistant';
+import { AiError, generateJson } from '../src/services/llm';
 import { api, bearer, createCase, doctorToken, registerPatient, resetDb } from './helpers';
 
 const geminiReply = (obj: unknown, status = 200) =>
@@ -83,9 +84,10 @@ describe('POST /api/ai/symptoms', () => {
     expect(res.body.data.emergency.isEmergency).toBe(true);
     expect(res.body.data.ai).toBeNull();
     expect(res.body.data.aiStatus).toBe('unavailable');
-    // main model + 1 retry + fallback model
+    // main model → fallback model → main model
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(String(fetchMock.mock.calls[2][0])).toContain('fallback-model');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('fallback-model');
+    expect(String(fetchMock.mock.calls[2][0])).not.toContain('fallback-model');
   });
 
   it('reports AI disabled (no network call) when no key is configured', async () => {
@@ -218,5 +220,40 @@ describe('POST /api/doctor/patients/:id/ai-summary', () => {
     expect((await api().post(`/api/doctor/patients/${c.id}/ai-summary`)).status).toBe(401);
     const doc = await doctorToken();
     expect((await api().post('/api/doctor/patients/SC-2026-9999/ai-summary').set(bearer(doc))).status).toBe(404);
+  });
+});
+
+describe('generateJson failover and time budget (llm.ts)', () => {
+  const opts = { task: 'test', system: 'sys', parts: [{ text: 'hi' }], responseSchema: { type: 'OBJECT' } };
+
+  afterEach(() => {
+    delete process.env.GEMINI_TOTAL_BUDGET_MS;
+  });
+
+  it('tries the fallback model second when the main model returns 503', async () => {
+    fetchMock.mockResolvedValueOnce(geminiReply({}, 503)).mockResolvedValueOnce(geminiReply({ status: 'OK' }));
+    await expect(generateJson(opts)).resolves.toEqual({ status: 'OK' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('fallback-model');
+    expect(String(fetchMock.mock.calls[1][0])).toContain('fallback-model');
+  });
+
+  it('stops with a 503 AiError when the total time budget is used up', async () => {
+    process.env.GEMINI_TOTAL_BUDGET_MS = '50';
+    // Never answers; only rejects when the request is aborted by the timeout.
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))))
+    );
+    const err = await generateJson(opts).catch((e) => e);
+    expect(err).toBeInstanceOf(AiError);
+    expect(err.statusCode).toBe(503);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // budget gone after the first attempt; no further calls
+  });
+
+  it('does not retry after a 401', async () => {
+    fetchMock.mockResolvedValue(geminiReply({}, 401));
+    await expect(generateJson(opts)).rejects.toBeInstanceOf(AiError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

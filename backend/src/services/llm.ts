@@ -101,15 +101,20 @@ async function callModel(model: string, apiKey: string, timeoutMs: number, apiBa
 
 /**
  * Calls Gemini and returns the parsed JSON (unvalidated — always validate with zod).
- * Tries the main model, retries once, then the fallback model on rate limits, server errors or timeouts.
+ * On rate limits, server errors or timeouts it tries main → fallback → main (no fallback: main → main),
+ * all within one total time budget (GEMINI_TOTAL_BUDGET_MS, default 45 s).
  */
 export async function generateJson(opts: GenerateJsonOptions): Promise<unknown> {
   const cfg = getAiConfig();
   if (!cfg.apiKey) throw new AiError(AI_DISABLED_MESSAGE, 'disabled');
-  const attempts = [cfg.model, cfg.model, ...(cfg.fallbackModel ? [cfg.fallbackModel] : [])];
+  const budgetMs = parseInt(process.env.GEMINI_TOTAL_BUDGET_MS || '45000', 10) || 45000;
+  const deadline = Date.now() + budgetMs;
+  const attempts = cfg.fallbackModel ? [cfg.model, cfg.fallbackModel, cfg.model] : [cfg.model, cfg.model];
   for (const model of attempts) {
+    const timeLeft = deadline - Date.now();
+    if (timeLeft <= 0) break;
     try {
-      return await callModel(model, cfg.apiKey, cfg.timeoutMs, cfg.apiBase, opts);
+      return await callModel(model, cfg.apiKey, Math.min(cfg.timeoutMs, timeLeft), cfg.apiBase, opts);
     } catch (err) {
       if (err instanceof RetryableError) continue;
       throw err;

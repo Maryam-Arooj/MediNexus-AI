@@ -40,6 +40,7 @@ notepad .env
 | `GEMINI_API_KEY` | **AI features.** Free key from https://aistudio.google.com/apikey (sign in with Google → *Create API key*). Paste it here yourself; never share it in chat or commit it. Leave empty to run without AI. |
 | `GEMINI_MODEL` | Default `gemini-2.5-flash`. If Google renames models and you get an AI error, put the current *Flash* model name shown in AI Studio here. |
 | `GEMINI_FALLBACK_MODEL` | Default `gemini-2.5-flash-lite` (used automatically when the main model is busy) |
+| `GEMINI_TOTAL_BUDGET_MS` | Optional, default `45000`. Max total wait for one AI request; attempts go main → fallback → main, and each is cut short so the total stays within this budget. |
 
 If your `backend\.env` was created before the AI features, add these lines at the end:
 
